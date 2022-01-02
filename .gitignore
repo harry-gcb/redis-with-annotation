@@ -1,32 +1,40 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
+.*.swp
 *.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
+*.xo
 *.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
+*.d
+*.log
+dump.rdb
+redis-benchmark
+redis-check-aof
+redis-check-rdb
+redis-check-dump
+redis-cli
+redis-sentinel
+redis-server
+doc-tools
+release
+misc/*
+src/release.h
+appendonly.aof
+SHORT_TERM_TODO
+release.h
+src/transfer.sh
+src/configs
+redis.ds
+src/redis.conf
+src/nodes.conf
+deps/lua/src/lua
+deps/lua/src/luac
+deps/lua/src/liblua.a
+tests/tls/*
+.make-*
+.prerequisites
+*.dSYM
+Makefile.dep
+.vscode/*
+.idea/*
+.ccls
+.ccls-cache/*
+compile_commands.json
+redis.code-workspace
