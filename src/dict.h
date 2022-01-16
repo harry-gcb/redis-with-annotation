@@ -129,7 +129,7 @@ typedef struct dictIterator
     dictEntry *entry;     /* 当前迭代到的节点的指针 */
     dictEntry *nextEntry; /* 当前迭代节点的下一个节点;因为在安全迭代器运作时， entry 所指向的节点可能会被修改，所以需要一个额外的指针来保存下一节点的位置，从而防止指针丢失 */
     /* unsafe iterator fingerprint for misuse detection. */
-    long long fingerprint;
+    long long fingerprint; /* 是一个64位的hash值, 是根据字典的内存地址生成的, 代表着字典当前的状态, 非安全迭代中, 如果字典内存发生了新的变化, 则 fingerprint 的值也会跟着变, 用于非安全迭代的快速失败 */
 } dictIterator;
 
 typedef void(dictScanFunction)(void *privdata, const dictEntry *de);
@@ -215,39 +215,39 @@ typedef void(dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 #endif
 
 /* API */
-dict *dictCreate(dictType *type, void *privDataPtr); /* 创建一个新的字典 */
-int dictExpand(dict *d, unsigned long size);
-int dictTryExpand(dict *d, unsigned long size);
-int dictAdd(dict *d, void *key, void *val);
-dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing);
-dictEntry *dictAddOrFind(dict *d, void *key);
-int dictReplace(dict *d, void *key, void *val);
-int dictDelete(dict *d, const void *key);
-dictEntry *dictUnlink(dict *ht, const void *key);
-void dictFreeUnlinkedEntry(dict *d, dictEntry *he);
-void dictRelease(dict *d);
-dictEntry *dictFind(dict *d, const void *key);
-void *dictFetchValue(dict *d, const void *key);
-int dictResize(dict *d);
-dictIterator *dictGetIterator(dict *d);
-dictIterator *dictGetSafeIterator(dict *d);
-dictEntry *dictNext(dictIterator *iter);
-void dictReleaseIterator(dictIterator *iter);
-dictEntry *dictGetRandomKey(dict *d);
+dict *dictCreate(dictType *type, void *privDataPtr);             /* 创建一个新的字典 */
+int dictExpand(dict *d, unsigned long size);                     /* 创建或扩展一个新的哈希表 */
+int dictTryExpand(dict *d, unsigned long size);                  /* try创建或扩展一个新的哈希表 */
+int dictAdd(dict *d, void *key, void *val);                      /* 将给定键值对添加到字典中 */
+dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing); /* 将给定键值对添加到字典中 */
+dictEntry *dictAddOrFind(dict *d, void *key);                    /* 添加新的节点或者查找已存在节点 */
+int dictReplace(dict *d, void *key, void *val);                  /* 将给定的键值对添加到字典中，如果键已经存在，那么删除旧有的键值对。 */
+int dictDelete(dict *d, const void *key);                        /* 从字典中删除包含给定键的节点 */
+dictEntry *dictUnlink(dict *ht, const void *key);                /* 删除给定key的节点，并释放内存 */
+void dictFreeUnlinkedEntry(dict *d, dictEntry *he);              /* 释放节点内存 */
+void dictRelease(dict *d);                                       /* 删除并释放整个字典 */
+dictEntry *dictFind(dict *d, const void *key);                   /* 返回字典中包含键 key 的节点 */
+void *dictFetchValue(dict *d, const void *key);                  /* 获取包含给定键的节点的值 */
+int dictResize(dict *d);                                         /* 调整字典大小，让它的已用节点数和字典大小之间的比率接近 1:1 */
+dictIterator *dictGetIterator(dict *d);                          /* 创建并返回给定字典的不安全迭代器 */
+dictIterator *dictGetSafeIterator(dict *d);                      /* 创建并返回给定字典的安全迭代器 */
+dictEntry *dictNext(dictIterator *iter);                         /* 返回迭代器指向的当前节点，字典迭代完毕时，返回 NULL */
+void dictReleaseIterator(dictIterator *iter);                    /* 释放给定字典迭代器 */
+dictEntry *dictGetRandomKey(dict *d);                            /* 随机返回字典中任意一个节点。 */
 dictEntry *dictGetFairRandomKey(dict *d);
 unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count);
-void dictGetStats(char *buf, size_t bufsize, dict *d);
+void dictGetStats(char *buf, size_t bufsize, dict *d); /* 获取hash表状态 */
 uint64_t dictGenHashFunction(const void *key, int len);
 uint64_t dictGenCaseHashFunction(const unsigned char *buf, int len);
-void dictEmpty(dict *d, void(callback)(void *));
-void dictEnableResize(void);
-void dictDisableResize(void);
-int dictRehash(dict *d, int n);
-int dictRehashMilliseconds(dict *d, int ms);
+void dictEmpty(dict *d, void(callback)(void *)); /* 清空字典上的所有哈希表节点，并重置字典属性 */
+void dictEnableResize(void);                     /* 使能rehash */
+void dictDisableResize(void);                    /* 禁用rehash */
+int dictRehash(dict *d, int n);                  /* 执行 N 步渐进式 rehash */
+int dictRehashMilliseconds(dict *d, int ms);     /* 在给定毫秒数内，以 100 步为单位，对字典进行 rehash */
 void dictSetHashFunctionSeed(uint8_t *seed);
 uint8_t *dictGetHashFunctionSeed(void);
-unsigned long dictScan(dict *d, unsigned long v, dictScanFunction *fn, dictScanBucketFunction *bucketfn, void *privdata);
-uint64_t dictGetHash(dict *d, const void *key);
+unsigned long dictScan(dict *d, unsigned long v, dictScanFunction *fn, dictScanBucketFunction *bucketfn, void *privdata); /* dictScan() 函数用于迭代给定字典中的元素 */
+uint64_t dictGetHash(dict *d, const void *key); /* 获取哈希值 */                                                          /* 获取哈希值 */
 dictEntry **dictFindEntryRefByPtrAndHash(dict *d, const void *oldptr, uint64_t hash);
 
 /* Hash table types */
