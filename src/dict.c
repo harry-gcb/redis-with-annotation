@@ -147,12 +147,13 @@ int _dictInit(dict *d, dictType *type,
 
 int dictResize(dict *d)
 {
+    /* 字典数组最小长度 */
     unsigned long minimal;
 
     /* 不允许调整或者正在rehash时禁止调整，直接返回*/
     if (!dict_can_resize || dictIsRehashing(d))
         return DICT_ERR;
-    /* 计算让比率接近 1：1 所需要的最少节点数量 */
+    /* 获取hash表的元素数量，计算让比率接近 1：1 所需要的最少节点数量 */
     minimal = d->ht[0].used;
     if (minimal < DICT_HT_INITIAL_SIZE)
         minimal = DICT_HT_INITIAL_SIZE;
@@ -209,14 +210,20 @@ int _dictExpand(dict *d, unsigned long size, int *malloc_failed)
     /* 为哈希表分配空间，并将所有指针指向 NULL*/
     if (malloc_failed)
     {
+        /* 避免分配失败报错 */
+        /* 尝试分配hash数组 */
         n.table = ztrycalloc(realsize * sizeof(dictEntry *));
+        /* 设置是否分配失败, n.table == NULL 就是分配失败 */
         *malloc_failed = n.table == NULL;
+        /* 如果分配失败, 则返回错误 */
         if (*malloc_failed)
             return DICT_ERR;
     }
     else
+        /* 分配hash数组, 分配失败则终止程序 */
         n.table = zcalloc(realsize * sizeof(dictEntry *));
 
+    /* 设置节点数为0 */
     n.used = 0;
 
     /* Is this the first initialization? If so it's not really a rehashing
@@ -332,7 +339,7 @@ int dictRehash(dict *d, int n)
     if (d->ht[0].used == 0)
     {
         zfree(d->ht[0].table); /* 释放 ht[0] */
-        d->ht[0] = d->ht[1];   /* ht[1] 改成 ht[0] */
+        d->ht[0] = d->ht[1];   /* 用新的hash表替换旧hash表，赋值相当于拷贝 */
         _dictReset(&d->ht[1]); /* 重置 ht[1] 和 rehashidx，留作下次使用 */
         d->rehashidx = -1;
         return 0;
@@ -910,21 +917,28 @@ dictEntry *dictGetRandomKey(dict *d)
     /* 如果正在 rehash ，那么将 1 号哈希表也作为随机查找的目标 */
     if (dictIsRehashing(d))
     {
+        /* 循环随机获取, 直接到hash槽有节点存在为止 */
         do
         {
             /* We are sure there are no elements in indexes from 0
              * to rehashidx-1 */
+            /* 获取一个随机数, 然后根据两个hash表的长度计算hash槽. */
+            /* randomULong() % (dictSlots(d) - d->rehashidx) 保证随机值不包括 rehashidx 之前的, 注意, 这里是取模不是& */
             h = d->rehashidx + (randomULong() % (dictSlots(d) - d->rehashidx));
+            /* 如果算出来的随机hash槽大于旧hash表的长度, 则表示要获取新hash表的随机槽首节点, 否则获取旧hash表的随机槽首节点 */
             he = (h >= d->ht[0].size) ? d->ht[1].table[h - d->ht[0].size] : d->ht[0].table[h];
         } while (he == NULL);
     }
     else
     {
-        /* 否则，只从 0 号哈希表中查找节点 */
+        /* 不在rehash, 只有一个hash表，只从 0 号哈希表中查找节点 */
         do
         {
+            /* 生成随机数, 计算随机hash槽 */
             h = randomULong() & d->ht[0].sizemask;
+            /* 获取随机hash槽的首节点 */
             he = d->ht[0].table[h];
+            /* 节点为NULL, 则继续随机 */
         } while (he == NULL);
     }
 
@@ -973,18 +987,27 @@ dictEntry *dictGetRandomKey(dict *d)
  * of continuous elements to run some kind of algorithm or to produce
  * statistics. However the function is much faster than dictGetRandomKey()
  * at producing N elements. */
+/* 随机采集指定数量的节点. 有可能返回的数量达不到 count 的个数. 
+ * 如果要返回一些随机key, 这个函数比 dictGetRandomKey 快很多 
+ */
 unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count)
 {
-    unsigned long j;      /* internal hash table id, 0 or 1. */
+    unsigned long j; /* internal hash table id, 0 or 1. */
+    /* hash表的数量, 值为1或者2 */
     unsigned long tables; /* 1 or 2 tables? */
+    /* stored 表示已经采集的节点数, maxsizemask 表示容量的最大hash表的掩码 */
     unsigned long stored = 0, maxsizemask;
+    /* 采集次数上限 */
     unsigned long maxsteps;
 
+    /* 最多只能返回字典的总节点数. */
     if (dictSize(d) < count)
         count = dictSize(d);
+    /* 采集次数上限为元素个数的10倍 */
     maxsteps = count * 10;
 
     /* Try to do a rehashing work proportional to 'count'. */
+    /* 根据返回key的个数, 执行渐进式rehash操作 */
     for (j = 0; j < count; j++)
     {
         if (dictIsRehashing(d))
@@ -993,41 +1016,57 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count)
             break;
     }
 
+    /* 如果字典正在rehash, 则需要遍历两个hash表, 否则就遍历一个 */
     tables = dictIsRehashing(d) ? 2 : 1;
+    /* 获取hash表0的掩码作为最大掩码 */
     maxsizemask = d->ht[0].sizemask;
+    /* 如果hash表数量大于1, 表示字典现在是rehash状态, 如果字典是rehash状态, 则对比两个hash表的掩码, 取最大的作为 maxsizemask*/
     if (tables > 1 && maxsizemask < d->ht[1].sizemask)
         maxsizemask = d->ht[1].sizemask;
 
     /* Pick a random point inside the larger table. */
+    /* 获取随机数然后计算出一个随机hash槽. */
     unsigned long i = randomULong() & maxsizemask;
+    /* 统计遍历了空的hash槽个数 */
     unsigned long emptylen = 0; /* Continuous empty entries so far. */
+    /* 如果采样的key已经足够或者达到采样上限, 则退出循环 */
     while (stored < count && maxsteps--)
     {
+        /* 遍历hash表数组进行采集 */
         for (j = 0; j < tables; j++)
         {
             /* Invariant of the dict.c rehashing: up to the indexes already
              * visited in ht[0] during the rehashing, there are no populated
              * buckets, so we can skip ht[0] for indexes between 0 and idx-1. */
+            /* 跳过已经迁移到新hash表的hash槽索引,tables == 2 字典表示正在rehash,j == 0 , 表示目前正在遍历旧hash表 
+             * i < (unsigned long) d->rehashidx 表示i属于已经迁移的hash槽索引
+             */
             if (tables == 2 && j == 0 && i < (unsigned long)d->rehashidx)
             {
                 /* Moreover, if we are currently out of range in the second
                  * table, there will be no elements in both tables up to
                  * the current rehashing index, so we jump if possible.
                  * (this happens when going from big to small table). */
+                /* 如果当前随机索引大于hash表1的长度, 表示只能在hash表0中获取, 那么跳过 rehashidx 前面已经迁移的槽 */
                 if (i >= d->ht[1].size)
                     i = d->rehashidx;
                 else
-                    continue;
+                    continue; /* i 小于 rehashidx, 但是没有大于hash表1的容量, 直接跳过hash表0, 从hash表1中采样 */
             }
+            /* 如果随机hash槽索引大于当前hash表数组的长度, 则不处理 */
             if (i >= d->ht[j].size)
                 continue; /* Out of range for this table. */
+            /* 获取hash表的首节点 */
             dictEntry *he = d->ht[j].table[i];
 
             /* Count contiguous empty buckets, and jump to other
              * locations if they reach 'count' (with a minimum of 5). */
+            /* 如果首节点为 NULL */
             if (he == NULL)
             {
+                /* 统计空的hash槽 */
                 emptylen++;
+                /* 如果空的hash槽个数超过5且超过 count, 重新生成随机hash槽索引, 并且重置空的hash槽统计 */
                 if (emptylen >= 5 && emptylen > count)
                 {
                     i = randomULong() & maxsizemask;
@@ -1036,20 +1075,28 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count)
             }
             else
             {
+                /* 首节点不为空, 重置空的hash槽统计 */
                 emptylen = 0;
+                /* 遍历链表 */
                 while (he)
                 {
                     /* Collect all the elements of the buckets found non
                      * empty while iterating. */
+                    /* 将节点放进 dictEntry * 数组 */
                     *des = he;
+                    /* 数组指针移动到下一个索引 */
                     des++;
+                    /* 获取下一个节点 */
                     he = he->next;
+                    /* 获取的节点数加1 */
                     stored++;
+                    /* 如果获取的节点数已经满足, 则直接反回 */
                     if (stored == count)
                         return stored;
                 }
             }
         }
+        /* 获取下一个hash槽位置 */
         i = (i + 1) & maxsizemask;
     }
     return stored;
@@ -1067,31 +1114,51 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count)
  * appearing one after the other. Then we report a random element in the range.
  * In this way we smooth away the problem of different chain lengths. */
 #define GETFAIR_NUM_ENTRIES 15
+/* 公平地获取一个随机key. 
+ * 为什么比 dictGetRandomKey 公平一点呢?. dictGetRandomKey 由于不同的槽, 链表的长度可能不一样, 就会导致概率的分布不一样
+ * dictGetSomeKeys 返回的长度是固定的, 从固定的链表长度中随机节点, 相对于 dictGetRandomKey 链表长度不固定会公平一点
+ */
 dictEntry *dictGetFairRandomKey(dict *d)
 {
+    /* 节点数组 */
     dictEntry *entries[GETFAIR_NUM_ENTRIES];
+    /* 随机获取15个节点 */
     unsigned int count = dictGetSomeKeys(d, entries, GETFAIR_NUM_ENTRIES);
     /* Note that dictGetSomeKeys() may return zero elements in an unlucky
      * run() even if there are actually elements inside the hash table. So
      * when we get zero, we call the true dictGetRandomKey() that will always
      * yield the element if the hash table has at least one. */
+    /* 如果没有获取到, 则随机返回一个key */
     if (count == 0)
         return dictGetRandomKey(d);
+    /* 在这一组节点中, 生成随机索引 */
     unsigned int idx = rand() % count;
+    /* 在这一组节点中, 随机获取一个 */
     return entries[idx];
 }
 
 /* Function to reverse bits. Algorithm from:
  * http://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel */
+/* 对 v 进行二进制逆序操作, 这个算法有点意思, 
+ * 可以看一下 https://www.cnblogs.com/gqtcgq/p/7247077.html */
 static unsigned long rev(unsigned long v)
 {
+    /* CHAR_BIT 一般是8位, sizeof 表示v的字节, long是4个字节, 也就是 s=32, 也就是二进制的 100000 */
     unsigned long s = CHAR_BIT * sizeof(v); // bit size; must be power of 2
+    /* ~0UL 相当于32个1 */
     unsigned long mask = ~0UL;
+    /* s >>= 1 第一次移动之后就是 010000, 也就是16, 第三次为8, 依次类推4, 2, 1, 最多向右移动6次就为0了, 也就是说while有5次的遍历操作 */
     while ((s >>= 1) > 0)
     {
+        /* mask << s相当于左移s位, 也就是保留低s位, 最终变成高s位为1, 低s位为0 */
+        /* mask ^= (mask << s), mask结果为只有低s位都为1, 高s位都是0, 如: 也就是高16位都为0, 低16位都为1 */
         mask ^= (mask << s);
+        /* (v >> s) & mask相当于将高s位移动到低s位 */
+        /* ~mask表示高s位都是1, 低s位都是0, (v << s) & ~mask 相当将低s位移动到高s位 */
+        /* 将两者 | , 表示将高s位与低s位互换了 */
         v = ((v >> s) & mask) | ((v << s) & ~mask);
     }
+    /* 返回倒置的二进制 */
     return v;
 }
 
@@ -1232,21 +1299,30 @@ unsigned long dictScan(dict *d,
     const dictEntry *de, *next;
     unsigned long m0, m1;
 
+    /* 跳过空字典 */
     if (dictSize(d) == 0)
         return 0;
 
     /* This is needed in case the scan callback tries to do dictFind or alike. */
+
+    /* 如果字典正在rehash, 则停顿rehash */
     dictPauseRehashing(d);
 
+    /* 如果字典没有在rehash, 迭代只有一个哈希表的字典 */
     if (!dictIsRehashing(d))
     {
+        /* 获取hash表0的指针 */
         t0 = &(d->ht[0]);
+        /* 获取hash表0的掩码 */
         m0 = t0->sizemask;
 
         /* Emit entries at cursor */
+        /* 如果桶的回调函数存在, 则用回调函数处理要获取的桶 */
         if (bucketfn)
             bucketfn(privdata, &t0->table[v & m0]);
+        /* 获取桶上的首节点 */
         de = t0->table[v & m0];
+        /* 如果节点存在, 则遍历链表上的节点, 并且使用 fn 函数处理 */
         while (de)
         {
             next = de->next;
@@ -1256,47 +1332,73 @@ unsigned long dictScan(dict *d,
 
         /* Set unmasked bits so incrementing the reversed cursor
          * operates on the masked bits */
+        /* 假如hash表0长度为8, 那么m0就应该为前29位为0, 后三位为1, 也就是 ...000111 */
+        /* ~m0 也就是, ...111000, v |= ~m0 就相当于保留低位的数据, v最终结果为, 高29位为1, 低3位为实际数据, ...111xxx */
         v |= ~m0;
 
         /* Increment the reverse cursor */
+        /* 反转游标, 就变成 xxx111...111 */
         v = rev(v);
+        /* 游标加1, 因为低位都是1, 加1之后, 就会进1, 最终相当于实际数据加1, 其实就相当于xx(x + 1)000...000 */
         v++;
+        /* 再次返回转回原来的顺序 */
         v = rev(v);
     }
     else
     {
+        /* 获取字段的hash表0的引用 */
         t0 = &d->ht[0];
+        /* 获取字典的hash表1的引用 */
         t1 = &d->ht[1];
 
         /* Make sure t0 is the smaller and t1 is the bigger table */
+        /* 判断那个hash表的容量最小, 小容量的hash表为t0 */
         if (t0->size > t1->size)
         {
             t0 = &d->ht[1];
             t1 = &d->ht[0];
         }
 
+        /* 获取t0的掩码 */
         m0 = t0->sizemask;
+        /* 获取t1的掩码 */
         m1 = t1->sizemask;
 
         /* Emit entries at cursor */
+        /* 如果 bucketfn 函数不为null, 则使用bucketfn对链表进行处理 */
         if (bucketfn)
             bucketfn(privdata, &t0->table[v & m0]);
+        /* 获取游标对应的首节点 */
         de = t0->table[v & m0];
+        /* 遍历链表 */
         while (de)
         {
+            /* 获取下一个节点 */
             next = de->next;
+            /* 处理当前节点 */
             fn(privdata, de);
             de = next;
         }
 
         /* Iterate over indices in larger table that are the expansion
          * of the index pointed to by the cursor in the smaller table */
+        /* 处理大hash表t1，小表的槽, 在按大表rehash后的槽都是相对固定的 */
+        /* 假如小表容量是8, 则他的槽二进制就是三位, 如: 001, 010等等, 我们以abc表示3位二进制变量 */
+        /* 当扩容到32, 则他们二进制位为5位, 如: 00010, 01010等, 我们以xxabc来表示5位后的二进制变量 */
+        /* 也就是扩容后, 落在二进制abc的值, 很有可能会重hash后会落在xxabc中, */
+        /* 所以我们扫描小表的abc后, 再将abc作为后缀, 穷举xxabc中的xx, 就可以获取rehash两张表中原来在同一个槽的key值 */
+        /* 如果是大表变小表同理 */
+
+        /* 具体实现就是在遍历完小表Cursor位置后，将小表Cursor位置可能Rehash到的大表所有位置全部遍历一遍，然后再返回遍历元素和下一个小表遍历位置。 */
         do
         {
             /* Emit entries at cursor */
+            /* 首先用桶函数处理 */
             if (bucketfn)
                 bucketfn(privdata, &t1->table[v & m1]);
+            /* 获取游标在大表t1对应的槽 */
             de = t1->table[v & m1];
+            /* 遍历槽上的链表, 使用函数处理获得的节点 */
             while (de)
             {
                 next = de->next;
@@ -1305,15 +1407,23 @@ unsigned long dictScan(dict *d,
             }
 
             /* Increment the reverse cursor not covered by the smaller mask.*/
+            /* 为什么这里能直接往上递增呢? */
+            /* 假如是小表变大表, 上个游标xxabc的xx肯定是00, 所以在读大表时, 可以直接倒序往上加, 直到xx再次变00, 也就是穷举xx */
+            /* 假如是大表变小表, 上个游标xxabc的xx很可能不为00, 假如为01, 那么就代表着00和10是被访问过的了(因为大表变小表, 当前游标之前的都被扫描过了), 最终才会返回01的, 所以遍历大表时高位序遍历不仅能把迁移的节点后槽遍历完, 还不重复 */
+            /* 假如m1为...011111, ~m1就是...100000, v |= ~m1 就相当于 ...1xxabc */
             v |= ~m1;
+            /* 反转, 结果是 abcxx11...111 */
             v = rev(v);
             v++;
             v = rev(v);
 
             /* Continue while bits covered by mask difference is non-zero */
+            /* 如果m0是...000111, m1是...011111, 那么 m0^m1就是...011000, 也就是只保留m1的高位 */
+            /* v & (m0 ^ m1) 就是, 当v相对于m0的高位都为0时, 退出循环 */
         } while (v & (m0 ^ m1));
     }
 
+    /* 减少停顿rehash的状态 */
     dictResumeRehashing(d);
 
     return v;
