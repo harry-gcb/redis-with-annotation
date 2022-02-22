@@ -534,8 +534,12 @@ typedef enum
 #define REDISMODULE_TYPE_SIGN(id) ((id & ~((uint64_t)REDISMODULE_TYPE_ENCVER_MASK)) >> REDISMODULE_TYPE_ENCVER_BITS)
 
 /* Bit flags for moduleTypeAuxSaveFunc */
+#ifndef REDISMODULE_AUX_BEFORE_RDB
 #define REDISMODULE_AUX_BEFORE_RDB (1 << 0)
+#endif
+#ifndef REDISMODULE_AUX_AFTER_RDB
 #define REDISMODULE_AUX_AFTER_RDB (1 << 1)
+#endif
 
 struct RedisModule;
 struct RedisModuleIO;
