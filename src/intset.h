@@ -32,20 +32,21 @@
 #define __INTSET_H
 #include <stdint.h>
 
-typedef struct intset {
-    uint32_t encoding;
-    uint32_t length;
-    int8_t contents[];
+typedef struct intset
+{
+    uint32_t encoding; /* 编码方式 */
+    uint32_t length;   /* 集合包含的元素数量 */
+    int8_t contents[]; /* 保存元素的数组 */
 } intset;
 
-intset *intsetNew(void);
-intset *intsetAdd(intset *is, int64_t value, uint8_t *success);
-intset *intsetRemove(intset *is, int64_t value, int *success);
-uint8_t intsetFind(intset *is, int64_t value);
-int64_t intsetRandom(intset *is);
-uint8_t intsetGet(intset *is, uint32_t pos, int64_t *value);
-uint32_t intsetLen(const intset *is);
-size_t intsetBlobLen(intset *is);
+intset *intsetNew(void);                                        /* 创建一个新的整数集合 */
+intset *intsetAdd(intset *is, int64_t value, uint8_t *success); /* 将给定元素添加到整数集合 */
+intset *intsetRemove(intset *is, int64_t value, int *success);  /* 从整数集合移除给定元素 */
+uint8_t intsetFind(intset *is, int64_t value);                  /* 检查给定元素是否存在于整数集合 */
+int64_t intsetRandom(intset *is);                               /* 从整数集合随机返回一个值 */
+uint8_t intsetGet(intset *is, uint32_t pos, int64_t *value);    /* 取出底层数组在给定索引上的元素 */
+uint32_t intsetLen(const intset *is);                           /* 返回整数集合包含的元素个数 */
+size_t intsetBlobLen(intset *is);                               /* 返回整数集合占用的内存字节数 */
 int intsetValidateIntegrity(const unsigned char *is, size_t size, int deep);
 
 #ifdef REDIS_TEST
