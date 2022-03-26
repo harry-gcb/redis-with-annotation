@@ -63,6 +63,7 @@
 #include "ae.h"
 #include "cli_common.h"
 #include "mt19937-64.h"
+#include "log.h"
 
 #define UNUSED(V) ((void) V)
 
@@ -8267,7 +8268,12 @@ static sds askPassword(const char *msg) {
 int main(int argc, char **argv) {
     int firstarg;
     struct timeval tv;
-
+    LOG(TRACE, "test");
+    LOG(DEBUG, "test");
+    LOG(INFO, "test");
+    LOG(WARN, "test");
+    LOG(ERROR, "test");
+    LOG(FATAL, "test");
     memset(&config.sslconfig, 0, sizeof(config.sslconfig));
     config.hostip = sdsnew("127.0.0.1");
     config.hostport = 6379;

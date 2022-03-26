@@ -1,1 +1,1 @@
-make CFLAGS='-g -O0 -gdwarf-2 -g3'
+make CFLAGS='-g -O0 -gdwarf-2 -g3 -DENABLE_DEBUG -DCONSOLE_DEBUG'
