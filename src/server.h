@@ -507,11 +507,12 @@ typedef enum
 /* A redis object, that is a type able to hold a string / list / set */
 
 /* The actual Redis Object */
-#define OBJ_STRING 0 /* String object. */
-#define OBJ_LIST 1   /* List object. */
-#define OBJ_SET 2    /* Set object. */
-#define OBJ_ZSET 3   /* Sorted set object. */
-#define OBJ_HASH 4   /* Hash object. */
+/* 对象类型 */
+#define OBJ_STRING 0 /* String object.      字符串对象*/
+#define OBJ_LIST 1   /* List object.        列表对象*/
+#define OBJ_SET 2    /* Set object.         集合对象*/
+#define OBJ_ZSET 3   /* Sorted set object.  有序集合对象*/
+#define OBJ_HASH 4   /* Hash object.        哈希对象*/
 
 /* The "module" object type is a special one that signals that the object
  * is one directly managed by a Redis module. In this case the value points
@@ -665,17 +666,40 @@ typedef struct RedisModuleDigest
 /* Objects encoding. Some kind of objects like Strings and Hashes can be
  * internally represented in multiple ways. The 'encoding' field of the object
  * is set to one of this fields for this object. */
-#define OBJ_ENCODING_RAW 0        /* Raw representation */
-#define OBJ_ENCODING_INT 1        /* Encoded as integer */
-#define OBJ_ENCODING_HT 2         /* Encoded as hash table */
-#define OBJ_ENCODING_ZIPMAP 3     /* Encoded as zipmap */
-#define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
-#define OBJ_ENCODING_ZIPLIST 5    /* Encoded as ziplist */
-#define OBJ_ENCODING_INTSET 6     /* Encoded as intset */
-#define OBJ_ENCODING_SKIPLIST 7   /* Encoded as skiplist */
-#define OBJ_ENCODING_EMBSTR 8     /* Embedded sds string encoding */
-#define OBJ_ENCODING_QUICKLIST 9  /* Encoded as linked list of ziplists */
-#define OBJ_ENCODING_STREAM 10    /* Encoded as a radix tree of listpacks */
+/* 对象编码 */
+#define OBJ_ENCODING_RAW 0        /* Raw representation                     简单动态字符串 */
+#define OBJ_ENCODING_INT 1        /* Encoded as integer                     整数类型 */
+#define OBJ_ENCODING_HT 2         /* Encoded as hash table                  哈希表/字典 */
+#define OBJ_ENCODING_ZIPMAP 3     /* Encoded as zipmap                      zipmap已经废弃 */
+#define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding.     双端链表 已废弃 */
+#define OBJ_ENCODING_ZIPLIST 5    /* Encoded as ziplist                     压缩列表 */
+#define OBJ_ENCODING_INTSET 6     /* Encoded as intset                      整数集合 */
+#define OBJ_ENCODING_SKIPLIST 7   /* Encoded as skiplist                    跳跃表 */
+#define OBJ_ENCODING_EMBSTR 8     /* Embedded sds string encoding           编码的简单动态字符串 */
+#define OBJ_ENCODING_QUICKLIST 9  /* Encoded as linked list of ziplists     由双端链表和压缩列表构成的快速列表 */
+#define OBJ_ENCODING_STREAM 10    /* Encoded as a radix tree of listpacks   列表包的基数树*/
+/*
++------------------------------------------------+
++ 对象类型           编码方式
++------------------------------------------------+
++ OBJ_STRING        OBJ_ENCODING_RAW
++                   OBJ_ENCODING_INT
++                   OBJ_ENCODING_EMBSTR
++------------------------------------------------+
++ OBJ_LIST          OBJ_ENCODING_LINKEDLIST
++                   OBJ_ENCODING_ZIPLIST
++                   OBJ_ENCODING_QUICKLIST
++------------------------------------------------+
++ OBJ_SET           OBJ_ENCODING_INTSET
++                   OBJ_ENCODING_HT
++------------------------------------------------+
++ OBJ_ZSET          OBJ_ENCODING_ZIPLIST
++                   OBJ_ENCODING_SKIPLIST
++------------------------------------------------+
++ OBJ_HASH          OBJ_ENCODING_ZIPLIST
++                   OBJ_ENCODING_HT
++------------------------------------------------+
+*/
 
 #define LRU_BITS 24
 #define LRU_CLOCK_MAX ((1 << LRU_BITS) - 1) /* Max value of obj->lru */
@@ -686,13 +710,14 @@ typedef struct RedisModuleDigest
 #define OBJ_FIRST_SPECIAL_REFCOUNT OBJ_STATIC_REFCOUNT
 typedef struct redisObject
 {
-    unsigned type : 4;
-    unsigned encoding : 4;
+    unsigned type : 4;     /* 对象类型 */
+    unsigned encoding : 4; /* 编码*/
+    /* 记录最后一次被命令访问的时间 */
     unsigned lru : LRU_BITS; /* LRU time (relative to global lru_clock) or
                               * LFU data (least significant 8 bits frequency
                               * and most significant 16 bits access time). */
-    int refcount;
-    void *ptr;
+    int refcount;            /* 引用计数 */
+    void *ptr;               /* 指向底层实现的数据结构指针 */
 } robj;
 
 /* The a string name for an object's type as listed above
