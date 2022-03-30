@@ -2342,9 +2342,15 @@ void setTypeConvert(robj *subject, int enc);
 robj *setTypeDup(robj *o);
 
 /* Hash data type */
+#ifndef HASH_SET_TAKE_FIELD
 #define HASH_SET_TAKE_FIELD (1 << 0)
+#endif
+#ifndef HASH_SET_TAKE_VALUE
 #define HASH_SET_TAKE_VALUE (1 << 1)
+#endif
+#ifndef HASH_SET_COPY
 #define HASH_SET_COPY 0
+#endif
 
 void hashTypeConvert(robj *o, int enc);
 void hashTypeTryConversion(robj *subject, robj **argv, int start, int end);

@@ -46,19 +46,19 @@ typedef struct
 
 unsigned char *ziplistNew(void); /* 创建并返回一个新的 ziplist  */
 unsigned char *ziplistMerge(unsigned char **first, unsigned char **second);
-unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where);
-unsigned char *ziplistIndex(unsigned char *zl, int index);
-unsigned char *ziplistNext(unsigned char *zl, unsigned char *p);
-unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p);
-unsigned int ziplistGet(unsigned char *p, unsigned char **sval, unsigned int *slen, long long *lval);
-unsigned char *ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
-unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p);
-unsigned char *ziplistDeleteRange(unsigned char *zl, int index, unsigned int num);
+unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where);          /* 将长度为 slen 的字符串 s 推入到 zl 中 */
+unsigned char *ziplistIndex(unsigned char *zl, int index);                                              /* 根据给定索引，遍历列表，并返回索引指定节点的指针。 */
+unsigned char *ziplistNext(unsigned char *zl, unsigned char *p);                                        /* 返回 p 所指向节点的后置节点。 */
+unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p);                                        /* 返回 p 所指向节点的前置节点 */
+unsigned int ziplistGet(unsigned char *p, unsigned char **sval, unsigned int *slen, long long *lval);   /* 取出 p 所指向节点的值 */
+unsigned char *ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen); /* 将包含给定值 s 的新节点插入到给定的位置 p 中 */
+unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p);                                     /* 从 zl 中删除 *p 所指向的节点，并且原地更新 *p 所指向的位置，使得可以在迭代列表的过程中对节点进行删除 */
+unsigned char *ziplistDeleteRange(unsigned char *zl, int index, unsigned int num);                      /* 从 index 索引指定的节点开始，连续地从 zl 中删除 num 个节点 */
 unsigned char *ziplistReplace(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
-unsigned int ziplistCompare(unsigned char *p, unsigned char *s, unsigned int slen);
-unsigned char *ziplistFind(unsigned char *zl, unsigned char *p, unsigned char *vstr, unsigned int vlen, unsigned int skip);
-unsigned int ziplistLen(unsigned char *zl);
-size_t ziplistBlobLen(unsigned char *zl);
+unsigned int ziplistCompare(unsigned char *p, unsigned char *s, unsigned int slen);                                         /* 将 p 所指向的节点的值和 s 进行对比, 如果节点值和 s 的值相等，返回 1 ，不相等则返回 0*/
+unsigned char *ziplistFind(unsigned char *zl, unsigned char *p, unsigned char *vstr, unsigned int vlen, unsigned int skip); /* 寻找节点值和 s 相等的列表节点，并返回该节点的指针。 */
+unsigned int ziplistLen(unsigned char *zl);                                                                                 /* 返回 ziplist 中的节点个数 */
+size_t ziplistBlobLen(unsigned char *zl);                                                                                   /* 返回整个 ziplist 占用的内存字节数 */
 void ziplistRepr(unsigned char *zl);
 typedef int (*ziplistValidateEntryCB)(unsigned char *p, void *userdata);
 int ziplistValidateIntegrity(unsigned char *zl, size_t size, int deep,

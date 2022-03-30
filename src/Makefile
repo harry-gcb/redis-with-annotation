@@ -45,7 +45,7 @@ else
 endif
 
 #PREFIX?=/usr/local
-PREFIX=$LOCAL_INSTALL_PREFIX
+PREFIX?=$(LOCAL_INSTALL_PREFIX)
 INSTALL_BIN=$(PREFIX)/redis
 INSTALL=install
 PKG_CONFIG?=pkg-config
@@ -88,7 +88,6 @@ endif
 
 # Override default settings if possible
 -include .make-settings
-
 FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(REDIS_CFLAGS)
 FINAL_LDFLAGS=$(LDFLAGS) $(REDIS_LDFLAGS) $(DEBUG)
 FINAL_LIBS=-lm
