@@ -466,6 +466,13 @@ void flushSlaveKeysWithExpireList(void) {
     }
 }
 
+/* 在载入数据时，或者服务器为附属节点时，
+ * 即使 EXPIRE 的 TTL 为负数，或者 EXPIREAT 提供的时间戳已经过期，
+ * 服务器也不会主动删除这个键，而是等待主节点发来显式的 DEL 命令。
+ *
+ * 程序会继续将（一个可能已经过期的 TTL）设置为键的过期时间，
+ * 并且等待主节点发来 DEL 命令。
+ */
 int checkAlreadyExpired(long long when) {
     /* EXPIRE with negative TTL, or EXPIREAT with a timestamp into the past
      * should never be executed as a DEL when load the AOF or in the context
@@ -487,14 +494,27 @@ int checkAlreadyExpired(long long when) {
  *
  * unit is either UNIT_SECONDS or UNIT_MILLISECONDS, and is only used for
  * the argv[2] parameter. The basetime is always specified in milliseconds. */
+/* 这个函数是 EXPIRE 、 PEXPIRE 、 EXPIREAT 和 PEXPIREAT 命令的底层实现函数。
+ * 命令的第二个参数可能是绝对值，也可能是相对值。
+ * 当执行 *AT 命令时， basetime 为 0 ，在其他情况下，它保存的就是当前的绝对时间。
+ *
+ * unit 用于指定 argv[2] （传入过期时间）的格式，
+ * 它可以是 UNIT_SECONDS 或 UNIT_MILLISECONDS ，
+ * basetime 参数则总是毫秒格式的。
+ */
 void expireGenericCommand(client *c, long long basetime, int unit) {
     robj *key = c->argv[1], *param = c->argv[2];
     long long when; /* unix time in milliseconds when the key will expire. */
 
+    /* 取出 when 参数 */
     if (getLongLongFromObjectOrReply(c, param, &when, NULL) != C_OK)
         return;
     int negative_when = when < 0;
-    if (unit == UNIT_SECONDS) when *= 1000;
+    /* 如果传入的过期时间是以秒为单位的，那么将它转换为毫秒 */
+    if (unit == UNIT_SECONDS)
+    {
+        when *= 1000;
+    }
     when += basetime;
     if (((when < 0) && !negative_when) || ((when-basetime > 0) && negative_when)) {
         /* EXPIRE allows negative numbers, but we can at least detect an
@@ -503,6 +523,7 @@ void expireGenericCommand(client *c, long long basetime, int unit) {
         return;
     }
     /* No key, return zero. */
+    /* 取出键 */
     if (lookupKeyWrite(c->db,key) == NULL) {
         addReply(c,shared.czero);
         return;
@@ -510,7 +531,7 @@ void expireGenericCommand(client *c, long long basetime, int unit) {
 
     if (checkAlreadyExpired(when)) {
         robj *aux;
-
+        /* when 提供的时间已经过期，服务器为主节点，并且没在载入数据 */
         int deleted = server.lazyfree_lazy_expire ? dbAsyncDelete(c->db,key) :
                                                     dbSyncDelete(c->db,key);
         serverAssertWithInfo(c,key,deleted);

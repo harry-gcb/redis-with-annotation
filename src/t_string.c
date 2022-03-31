@@ -31,6 +31,7 @@
 #include <math.h> /* isnan(), isinf() */
 
 /* Forward declarations */
+/* 前向声明 */
 int getGenericCommand(client *c);
 
 /*-----------------------------------------------------------------------------
@@ -285,17 +286,23 @@ void psetexCommand(client *c) {
 int getGenericCommand(client *c) {
     robj *o;
 
+    /* 尝试从数据库中取出键 c->argv[1] 对应的值对象 
+     * 如果键不存在时，向客户端发送回复信息，并返回 NULL
+     */
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp])) == NULL)
         return C_OK;
 
+    /* 值对象存在，检查它的类型 */
     if (checkType(c,o,OBJ_STRING)) {
+        /* 类型错误 */
         return C_ERR;
     }
-
+    /* 类型正确，向客户端返回对象的值 */
     addReplyBulk(c,o);
     return C_OK;
 }
 
+/* get命令 */
 void getCommand(client *c) {
     getGenericCommand(c);
 }

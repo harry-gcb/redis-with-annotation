@@ -45,7 +45,7 @@ else
 endif
 
 #PREFIX?=/usr/local
-PREFIX?=$(LOCAL_INSTALL_PREFIX)
+PREFIX?=/home/harry/app
 INSTALL_BIN=$(PREFIX)/redis
 INSTALL=install
 PKG_CONFIG?=pkg-config

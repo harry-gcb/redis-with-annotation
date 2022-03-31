@@ -753,14 +753,14 @@ typedef struct clientReplyBlock
  * database. The database number is the 'id' field in the structure. */
 typedef struct redisDb
 {
-    dict *dict;                   /* The keyspace for this DB */
-    dict *expires;                /* Timeout of keys with a timeout set */
-    dict *blocking_keys;          /* Keys with clients waiting for data (BLPOP)*/
-    dict *ready_keys;             /* Blocked keys that received a PUSH */
-    dict *watched_keys;           /* WATCHED keys for MULTI/EXEC CAS */
-    int id;                       /* Database ID */
-    long long avg_ttl;            /* Average TTL, just for stats */
-    unsigned long expires_cursor; /* Cursor of the active expire cycle. */
+    dict *dict;                   /* The keyspace for this DB                   数据库键空间，保存着数据库中的所有键值对*/
+    dict *expires;                /* Timeout of keys with a timeout set         键的过期时间，字典的键为键，字典的值为过期事件 UNIX 时间戳*/
+    dict *blocking_keys;          /* Keys with clients waiting for data (BLPOP) 正处于阻塞状态的键*/
+    dict *ready_keys;             /* Blocked keys that received a PUSH          可以解除阻塞的键*/
+    dict *watched_keys;           /* WATCHED keys for MULTI/EXEC CAS            正在被 WATCH 命令监视的键*/
+    int id;                       /* Database ID                                数据库号码*/
+    long long avg_ttl;            /* Average TTL, just for stats                数据库的键的平均 TTL ，统计信息*/
+    unsigned long expires_cursor; /* Cursor of the active expire cycle.         活动的过期周期的光标。*/
     list *defrag_later;           /* List of key names to attempt to defrag one by one, gradually. */
 } redisDb;
 
@@ -907,11 +907,11 @@ typedef struct
 
 typedef struct client
 {
-    uint64_t id; /* Client incremental unique ID. */
-    connection *conn;
-    int resp;                           /* RESP protocol version. Can be 2 or 3. */
-    redisDb *db;                        /* Pointer to currently SELECTed DB. */
-    robj *name;                         /* As set by CLIENT SETNAME. */
+    uint64_t id;                        /* Client incremental unique ID.            Client唯一自增ID*/
+    connection *conn;                   /* client连接*/
+    int resp;                           /* RESP protocol version. Can be 2 or 3.    RESP协议版本*/
+    redisDb *db;                        /* Pointer to currently SELECTed DB.        当前正在使用的数据库*/
+    robj *name;                         /* As set by CLIENT SETNAME.                客户端的名字*/
     sds querybuf;                       /* Buffer we use to accumulate client queries. */
     size_t qb_pos;                      /* The position we have read in querybuf. */
     sds pending_querybuf;               /* If this client is flagged as master, this buffer
@@ -1238,10 +1238,10 @@ typedef enum childInfoType
 struct redisServer
 {
     /* General */
-    pid_t pid;                /* Main process pid. */
-    pthread_t main_thread_id; /* Main thread id */
-    char *configfile;         /* Absolute config file path, or NULL */
-    char *executable;         /* Absolute executable file path. */
+    pid_t pid;                /* Main process pid.                  主进程id */
+    pthread_t main_thread_id; /* Main thread id                     主线程id*/
+    char *configfile;         /* Absolute config file path, or NULL 配置文件的绝对路径 */
+    char *executable;         /* Absolute executable file path.     可执行文件的绝对路径 */
     char **exec_argv;         /* Executable argv vector (copy). */
     int dynamic_hz;           /* Change hz value depending on # of clients. */
     int config_hz;            /* Configured HZ value. May be different than
@@ -1250,10 +1250,10 @@ struct redisServer
     mode_t umask;             /* The umask value of the process on startup */
     int hz;                   /* serverCron() calls frequency in hertz */
     int in_fork_child;        /* indication that this is a fork child */
-    redisDb *db;
-    dict *commands;      /* Command table */
-    dict *orig_commands; /* Command table before command renaming. */
-    aeEventLoop *el;
+    redisDb *db;              /* 数组，保存着服务器中的所有数据库 */
+    dict *commands;           /* Command table */
+    dict *orig_commands;      /* Command table before command renaming. */
+    aeEventLoop *el;          /* 事件状态 */
     rax *errors;                         /* Errors table */
     redisAtomic unsigned int lruclock;   /* Clock for LRU eviction */
     volatile sig_atomic_t shutdown_asap; /* SHUTDOWN needed ASAP */
@@ -1294,8 +1294,8 @@ struct redisServer
     socketFds tlsfd;                          /* TLS socket file descriptors */
     int sofd;                                 /* Unix socket file descriptor */
     socketFds cfd;                            /* Cluster bus listening socket */
-    list *clients;                            /* List of active clients */
-    list *clients_to_close;                   /* Clients to close asynchronously */
+    list *clients;                            /* 链表，保存了所有客户端状态结构 List of active clients */
+    list *clients_to_close;                   /* 链表，保存了所有待关闭的客户端 Clients to close asynchronously */
     list *clients_pending_write;              /* There is to write or install handler. */
     list *clients_pending_read;               /* Client has pending read socket buffers. */
     list *slaves, *monitors;                  /* List of slaves and MONITORs */
@@ -1403,7 +1403,7 @@ struct redisServer
     int active_defrag_cycle_max;                 /* maximal effort for defrag in CPU percentage */
     unsigned long active_defrag_max_scan_fields; /* maximum number of fields of set/hash/zset/list to process from within the main dict scan */
     size_t client_max_querybuf_len;              /* Limit for client query buffer length */
-    int dbnum;                                   /* Total number of configured DBs */
+    int dbnum;                                   /* 服务器的数据库数量 Total number of configured DBs */
     int supervised;                              /* 1 if supervised, 0 otherwise. */
     int supervised_mode;                         /* See SUPERVISED_* */
     int daemonize;                               /* True if running as a daemon */
@@ -1527,7 +1527,7 @@ struct redisServer
     /* Replication (slave) */
     char *masteruser;                   /* AUTH with this user and masterauth with master */
     sds masterauth;                     /* AUTH with this password with master */
-    char *masterhost;                   /* Hostname of master */
+    char *masterhost;                   /* Hostname of master 主服务器的地址*/
     int masterport;                     /* Port of master */
     int repl_timeout;                   /* Timeout after N seconds of master idle */
     client *master;                     /* Client that is master for this slave */

@@ -103,9 +103,24 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
  * for read operations. Even if the key expiry is master-driven, we can
  * correctly report a key is expired on slaves even if the master is lagging
  * expiring our key via DELs in the replication link. */
+/* 查找读取操作的键，如果在指定的数据库中没有找到该键，则返回NULL。
+ * 作为调用此函数的一个副作用：
+ * 1. 达到TTL的key会过期
+ * 2. key的最后一次访问时间会更新
+ * 3. 全局key的命中/未命中状态会更新
+ * 4. 如果keyspace通知被启用了，将会触发“keymiss”通知
+ *
+ * 这个API只应用于读操作
+ * 
+ * LOOKUP_NONE：无特殊操作
+ * LOOKUP_NOTOUCH：不要更新最后访问时间
+ *
+ * 如果这个key存在但已经过期，会返回NULL
+ */
 robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags) {
     robj *val;
 
+    /* 检查key是否已经过期 */
     if (expireIfNeeded(db,key) == 1) {
         /* If we are in the context of a master, expireIfNeeded() returns 1
          * when the key is no longer valid, so we can return NULL ASAP. */
@@ -135,6 +150,7 @@ robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags) {
     val = lookupKey(db,key,flags);
     if (val == NULL)
         goto keymiss;
+    /* 更新命中信息 */
     server.stat_keyspace_hits++;
     return val;
 
@@ -142,12 +158,16 @@ keymiss:
     if (!(flags & LOOKUP_NONOTIFY)) {
         notifyKeyspaceEvent(NOTIFY_KEY_MISS, "keymiss", key, db->id);
     }
+    /* 更新不命中信息 */
     server.stat_keyspace_misses++;
     return NULL;
 }
 
-/* Like lookupKeyReadWithFlags(), but does not use any flag, which is the
- * common case. */
+/* Like lookupKeyReadWithFlags(), but does not use any flag, which is the common case. */
+/* 为执行读取操作而取出键 key 在数据库 db 中的值。
+ * 并根据是否成功找到值，更新服务器的命中/不命中信息。
+ * 找到时返回值对象，没找到返回 NULL 。
+ */
 robj *lookupKeyRead(redisDb *db, robj *key) {
     return lookupKeyReadWithFlags(db,key,LOOKUP_NONE);
 }
@@ -175,9 +195,9 @@ void SentReplyOnKeyMiss(client *c, robj *reply){
     }
 }
 robj *lookupKeyReadOrReply(client *c, robj *key, robj *reply) {
-    robj *o = lookupKeyRead(c->db, key);
-    if (!o) SentReplyOnKeyMiss(c, reply);
-    return o;
+    robj *o = lookupKeyRead(c->db, key);    /* 查找键对应的值对象 */
+    if (!o) SentReplyOnKeyMiss(c, reply);   /* 如果值对象为空，发送响应到client */
+    return o;                               /* 返回值对象 */
 }
 
 robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply) {
