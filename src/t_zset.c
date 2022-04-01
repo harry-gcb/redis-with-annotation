@@ -2159,6 +2159,7 @@ void zsetTypeRandomElement(robj *zsetobj, unsigned long zsetsize, ziplistEntry *
  *----------------------------------------------------------------------------*/
 
 /* This generic command implements both ZADD and ZINCRBY. */
+/* zset添加元素的主要逻辑 */
 void zaddGenericCommand(client *c, int flags)
 {
     static char *nanerr = "resulting score is not a number (NaN)";
@@ -2260,11 +2261,11 @@ void zaddGenericCommand(client *c, int flags)
         if (server.zset_max_ziplist_entries == 0 ||
             server.zset_max_ziplist_value < sdslen(c->argv[scoreidx + 1]->ptr))
         {
-            zobj = createZsetObject();
+            zobj = createZsetObject(); /* 创建跳跃表结构*/
         }
         else
         {
-            zobj = createZsetZiplistObject();
+            zobj = createZsetZiplistObject(); /* 创建压缩表结构 */
         }
         dbAdd(c->db, key, zobj);
     }
