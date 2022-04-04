@@ -44,8 +44,7 @@ else
 	STD+=-std=c99
 endif
 
-#PREFIX?=/usr/local
-PREFIX?=/home/harry/app
+PREFIX?=/usr/local
 INSTALL_BIN=$(PREFIX)/redis
 INSTALL=install
 PKG_CONFIG?=pkg-config
