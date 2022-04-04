@@ -155,7 +155,7 @@ int dictResize(dict *d)
         return DICT_ERR;
     /* 获取hash表的元素数量，计算让比率接近 1：1 所需要的最少节点数量 */
     minimal = d->ht[0].used;
-    if (minimal < DICT_HT_INITIAL_SIZE)
+    if (minimal < DICT_HT_INITIAL_SIZE) /* 容量最小为4 */
         minimal = DICT_HT_INITIAL_SIZE;
     /* 调整字典的大小 */
     return dictExpand(d, minimal);

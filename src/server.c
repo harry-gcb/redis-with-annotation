@@ -1556,10 +1556,10 @@ int htNeedsResize(dict *dict) {
 /* If the percentage of used slots in the HT reaches HASHTABLE_MIN_FILL
  * we resize the hash table to save memory */
 void tryResizeHashTables(int dbid) {
-    if (htNeedsResize(server.db[dbid].dict))
-        dictResize(server.db[dbid].dict);
-    if (htNeedsResize(server.db[dbid].expires))
-        dictResize(server.db[dbid].expires);
+    if (htNeedsResize(server.db[dbid].dict))    /* 判断是否需要缩容 */
+        dictResize(server.db[dbid].dict);       /* 执行缩容操作 */
+    if (htNeedsResize(server.db[dbid].expires)) /* 判断是否需要缩容 */
+        dictResize(server.db[dbid].expires);    /* 执行缩容操作 */
 }
 
 /* Our hash table implementation performs rehashing incrementally while
