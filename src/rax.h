@@ -94,12 +94,13 @@
  *
  */
 
+/* rax树的节点结构 */
 #define RAX_NODE_MAX_SIZE ((1<<29)-1)
 typedef struct raxNode {
-    uint32_t iskey:1;     /* Does this node contain a key? */
-    uint32_t isnull:1;    /* Associated value is NULL (don't store it). */
-    uint32_t iscompr:1;   /* Node is compressed. */
-    uint32_t size:29;     /* Number of children, or compressed string len. */
+    uint32_t iskey:1;     /* 当前节点是否包含一个key，占用1bit      Does this node contain a key? */
+    uint32_t isnull:1;    /* 当前key对应的value是否为空，占用1bit   Associated value is NULL (don't store it). */
+    uint32_t iscompr:1;   /* 当前节点是否为压缩节点，占用1bit       Node is compressed. */
+    uint32_t size:29;     /* 压缩节点压缩的字符串长度或者非压缩节点的子节点个数 Number of children, or compressed string len. */
     /* Data layout is as follows:
      *
      * If node is not compressed we have 'size' bytes, one for each children
@@ -127,26 +128,28 @@ typedef struct raxNode {
      * children, an additional value pointer is present (as you can see
      * in the representation above as "value-ptr" field).
      */
-    unsigned char data[];
+    unsigned char data[];   /* 当前节点包含的字符串以及子节点的指针，key对应的value指针 */
 } raxNode;
 
+/* rax树结构 */
 typedef struct rax {
-    raxNode *head;
-    uint64_t numele;
-    uint64_t numnodes;
+    raxNode *head;      /* 指向头结点的指针 */
+    uint64_t numele;    /* 元素个数 */
+    uint64_t numnodes;  /* 节点个数 */
 } rax;
 
 /* Stack data structure used by raxLowWalk() in order to, optionally, return
  * a list of parent nodes to the caller. The nodes do not have a "parent"
  * field for space concerns, so we use the auxiliary stack when needed. */
 #define RAX_STACK_STATIC_ITEMS 32
+/* 存储从根节点到当前节点的路径 */
 typedef struct raxStack {
-    void **stack; /* Points to static_items or an heap allocated array. */
-    size_t items, maxitems; /* Number of items contained and total space. */
+    void **stack; /* 用于记录路径 指针可能指向static_items（路径较短时）或者堆空间内存； Points to static_items or an heap allocated array. */
+    size_t items, maxitems; /* stack指向的空间的已用空间以及最大空间 Number of items contained and total space. */
     /* Up to RAXSTACK_STACK_ITEMS items we avoid to allocate on the heap
      * and use this static array of pointers instead. */
-    void *static_items[RAX_STACK_STATIC_ITEMS];
-    int oom; /* True if pushing into this stack failed for OOM at some point. */
+    void *static_items[RAX_STACK_STATIC_ITEMS]; /* 数组中的每个元素都是指针，用于存储路径 */
+    int oom; /* 数组中的每个元素都是指针，用于存储路径 True if pushing into this stack failed for OOM at some point. */
 } raxStack;
 
 /* Optional callback used for iterators and be notified on each rax node,
@@ -173,16 +176,20 @@ typedef int (*raxNodeCallback)(raxNode **noderef);
 #define RAX_ITER_SAFE (1<<2)   /* Safe iterator, allows operations while
                                   iterating. But it is slower. */
 typedef struct raxIterator {
-    int flags;
-    rax *rt;                /* Radix tree we are iterating. */
-    unsigned char *key;     /* The current string. */
-    void *data;             /* Data associated to this key. */
-    size_t key_len;         /* Current key length. */
-    size_t key_max;         /* Max key len the current key buffer can hold. */
-    unsigned char key_static_string[RAX_ITER_STATIC_LEN];
-    raxNode *node;          /* Current node. Only for unsafe iteration. */
-    raxStack stack;         /* Stack used for unsafe iteration. */
-    raxNodeCallback node_cb; /* Optional node callback. Normally set to NULL. */
+    int flags;              /* 迭代器标志位 
+                             * RAX_ITER_JUST_SEEKED代表当前迭代器指向的元素是刚刚搜索过的，当需要从迭代器中获取元素时，直接返回当前元素并清空该标志位即可
+                             * RAX_ITER_EOF代表当前迭代器已经遍历到rax树的最后一个节点
+                             * RAX_ITER_SAFE代表当前迭代器为安全迭代器，可以进行写操作
+                             */
+    rax *rt;                /* 当前迭代器对应的rax  Radix tree we are iterating. */
+    unsigned char *key;     /* key存储了当前迭代器遍历到的key，该指针指向key_static_string或者从堆中申请的内存  The current string. */
+    void *data;             /* 指向当前key关联的value值     Data associated to this key. */
+    size_t key_len;         /* 指向key空间的已用空间 Current key length. */
+    size_t key_max;         /* 指向key空间的最大空间 Max key len the current key buffer can hold. */
+    unsigned char key_static_string[RAX_ITER_STATIC_LEN];   /* 默认存储空间，当key比较大时，会使用堆空间内存 */
+    raxNode *node;          /* 默认存储空间，当key比较大时，会使用堆空间内存 Current node. Only for unsafe iteration. */
+    raxStack stack;         /* 记录了从根节点到当前节点的路径，用于raxNode的向上遍历    Stack used for unsafe iteration. */
+    raxNodeCallback node_cb; /* 节点的回调函数，通常为空   Optional node callback. Normally set to NULL. */
 } raxIterator;
 
 /* A special pointer returned for not found items. */
