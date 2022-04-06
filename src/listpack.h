@@ -45,10 +45,10 @@
 #define LP_AFTER 1
 #define LP_REPLACE 2
 
-unsigned char *lpNew(size_t capacity);
-void lpFree(unsigned char *lp);
+unsigned char *lpNew(size_t capacity);  /* 创建一个listpack*/
+void lpFree(unsigned char *lp);         /* 释放listpack */
 unsigned char* lpShrinkToFit(unsigned char *lp);
-unsigned char *lpInsert(unsigned char *lp, unsigned char *ele, uint32_t size, unsigned char *p, int where, unsigned char **newp);
+unsigned char *lpInsert(unsigned char *lp, unsigned char *ele, uint32_t size, unsigned char *p, int where, unsigned char **newp);   /* 插入元素 */
 unsigned char *lpAppend(unsigned char *lp, unsigned char *ele, uint32_t size);
 unsigned char *lpDelete(unsigned char *lp, unsigned char *p, unsigned char **newp);
 uint32_t lpLength(unsigned char *lp);

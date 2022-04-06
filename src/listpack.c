@@ -225,12 +225,15 @@ int lpStringToInt64(const char *s, unsigned long slen, int64_t *value) {
  * Pre-allocate at least `capacity` bytes of memory,
  * over-allocated memory can be shrinked by `lpShrinkToFit`.
  * */
+/* 创建一个空的的listpack */
 unsigned char *lpNew(size_t capacity) {
-    unsigned char *lp = lp_malloc(capacity > LP_HDR_SIZE+1 ? capacity : LP_HDR_SIZE+1);
+    /*|----|--|*******|-|*/
+    /*|total_bytes|num_elem|entry...|end_flag|*/
+    unsigned char *lp = lp_malloc(capacity > LP_HDR_SIZE+1 ? capacity : LP_HDR_SIZE+1); /* 分配内存 LP_HDR_SIZE=6，为listpack的头部 */
     if (lp == NULL) return NULL;
-    lpSetTotalBytes(lp,LP_HDR_SIZE+1);
-    lpSetNumElements(lp,0);
-    lp[LP_HDR_SIZE] = LP_EOF;
+    lpSetTotalBytes(lp,LP_HDR_SIZE+1);  /* 设置listpack占用字节数 */
+    lpSetNumElements(lp,0);             /* 设置元素个数为0 */
+    lp[LP_HDR_SIZE] = LP_EOF;           /* 设置结尾标志0xFF */
     return lp;
 }
 
@@ -652,6 +655,14 @@ unsigned char *lpGet(unsigned char *p, int64_t *count, unsigned char *intbuf) {
  * For deletion operations ('ele' set to NULL) 'newp' is set to the next
  * element, on the right of the deleted one, or to NULL if the deleted element
  * was the last one. */
+/* 插入元素 
+ * lp：当前待操作的listpack
+ * ele：待插入元素或者待替换元素，ele为空时即删除操作
+ * size：ele的长度
+ * p：待插入的位置或者待替换的元素位置
+ * where：LP_BEFORE前插，LP_AFTER后插
+ * *newp：用于返回插入的元素、替换的元素、删除元素的下一个元素
+ */
 unsigned char *lpInsert(unsigned char *lp, unsigned char *ele, uint32_t size, unsigned char *p, int where, unsigned char **newp) {
     unsigned char intenc[LP_MAX_INT_ENCODING_LEN];
     unsigned char backlen[LP_MAX_BACKLEN_SIZE];
