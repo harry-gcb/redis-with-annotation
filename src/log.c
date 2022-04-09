@@ -89,17 +89,16 @@ void setLogLevel(unsigned int level)
     logLevel = level;
 }
 
-void logMessage(unsigned int level, const char *filename, int line, const char *function, pthread_t tid, const char *fmt, ...)
+void logMessage(unsigned int level, const char* filename, int line, const char* function,
+                pthread_t tid, const char* fmt, ...)
 {
-    if (level > logLevel)
-    {
+    if (level > logLevel) {
         return;
     }
     struct timeval tv = {0};
     gettimeofday(&tv, NULL);
     struct tm *tm = localtime((const time_t *)&tv.tv_sec);
-    if (!tm)
-    {
+    if (!tm) {
         return;
     }
 
@@ -110,34 +109,45 @@ void logMessage(unsigned int level, const char *filename, int line, const char *
     int data_size = vsnprintf(data, sizeof(data), fmt, args);
     va_end(args);
 
-    int head_size = console ? snprintf(head, sizeof(head), "%s[%04d-%02d-%02d %02d:%02d:%02d.%06ld]%s %-5s %s (%s:%d) [%ld] ",
-                                       logcolor[level],
-                                       tm->tm_year + 1900,
-                                       tm->tm_mon + 1,
-                                       tm->tm_mday,
-                                       tm->tm_hour,
-                                       tm->tm_min,
-                                       tm->tm_sec,
-                                       tv.tv_usec,
-                                       nocolor,
-                                       logstr[level],
-                                       function,
-                                       filename,
-                                       line,
-                                       tid)
-                            : snprintf(head, sizeof(head), "[%04d-%02d-%02d %02d:%02d:%02d.%06ld] %-5s %s (%s:%d) [%ld] ",
-                                       tm->tm_year + 1900,
-                                       tm->tm_mon + 1,
-                                       tm->tm_mday,
-                                       tm->tm_hour,
-                                       tm->tm_min,
-                                       tm->tm_sec,
-                                       tv.tv_usec,
-                                       logstr[level],
-                                       function,
-                                       filename,
-                                       line,
-                                       tid);
+    int head_size = 0;
+    if (console) {
+        head_size = snprintf(head,
+                             sizeof(head),
+                             "%s[%04d-%02d-%02d %02d:%02d:%02d.%06ld]%s %-5s "
+                             "%s (%s:%d) [%ld] ",
+                             logcolor[level],
+                             tm->tm_year + 1900,
+                             tm->tm_mon + 1,
+                             tm->tm_mday,
+                             tm->tm_hour,
+                             tm->tm_min,
+                             tm->tm_sec,
+                             tv.tv_usec,
+                             nocolor,
+                             logstr[level],
+                             function,
+                             filename,
+                             line,
+                             tid);
+    }
+    else {
+        head_size = snprintf(head,
+                             sizeof(head),
+                             "[%04d-%02d-%02d %02d:%02d:%02d.%06ld] %-5s %s "
+                             "(%s:%d) [%ld] ",
+                             tm->tm_year + 1900,
+                             tm->tm_mon + 1,
+                             tm->tm_mday,
+                             tm->tm_hour,
+                             tm->tm_min,
+                             tm->tm_sec,
+                             tv.tv_usec,
+                             logstr[level],
+                             function,
+                             filename,
+                             line,
+                             tid);
+    }
     struct iovec vec[3] = {0};
     vec[0].iov_base = head;
     vec[0].iov_len = head_size;
@@ -147,4 +157,5 @@ void logMessage(unsigned int level, const char *filename, int line, const char *
     vec[2].iov_len = sizeof(NEWLINE);
     writev(fd, vec, 3);
 }
+
 #endif
