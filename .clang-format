@@ -175,11 +175,11 @@ ForEachMacros:  [ foreach, Q_FOREACH, BOOST_FOREACH ]
 #   可以定义负数优先级从而保证某些#include永远在最前面
 IncludeCategories: 
   - Regex:  '^"(llvm|llvm-c|clang|clang-c)/'
-    Priority:   2
-  - Regex:  '^(<|"(gtest|isl|json)/)'
     Priority:   3
-  - Regex:  '.*'
+  - Regex:  '^(<|"(gtest|isl|json)/)'
     Priority:   1
+  - Regex:  '.*'
+    Priority:   2
 
 # 缩进case标签
 IndentCaseLabels: false

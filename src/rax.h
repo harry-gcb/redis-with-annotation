@@ -202,10 +202,13 @@ rax* raxNew(void);
 int raxInsert(rax* rax, unsigned char* s, size_t len, void* data, void** old);
 /* 与raxInsert相同，但是key存在时不进行插入 */
 int raxTryInsert(rax* rax, unsigned char* s, size_t len, void* data, void** old);
+/* 在rax中删除长度为len的s（s代表待删除的key），*old用于返回该key对应的value */
 int raxRemove(rax* rax, unsigned char* s, size_t len, void** old);
 /* 查找key（s）对应的value */
-void*         raxFind(rax* rax, unsigned char* s, size_t len);
+void* raxFind(rax* rax, unsigned char* s, size_t len);
+/* 释放rax */
 void raxFree(rax *rax);
+/* 释放rax，释放每个key时，都会调用free_callback函数 */
 void raxFreeWithCallback(rax *rax, void (*free_callback)(void*));
 void raxStart(raxIterator *it, rax *rt);
 int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len);
