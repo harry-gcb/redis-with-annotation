@@ -121,8 +121,9 @@ struct client;
 #define SLC_NONE      0
 #define SLC_NOCREAT   (1<<0) /* Do not create the consumer if it doesn't exist */
 #define SLC_NOREFRESH (1<<1) /* Do not update consumer's seen-time */
-
+/* 实现stream的初始化 */
 stream *streamNew(void);
+/* 释放给定的stream */
 void freeStream(stream *s);
 unsigned long streamLength(const robj *subject);
 size_t streamReplyWithRange(client *c, stream *s, streamID *start, streamID *end, size_t count, int rev, streamCG *group, streamConsumer *consumer, int flags, streamPropInfo *spi);
@@ -145,6 +146,7 @@ robj *streamDup(robj *o);
 int streamValidateListpackIntegrity(unsigned char *lp, size_t size, int deep);
 int streamParseID(const robj *o, streamID *id);
 robj *createObjectFromStreamID(streamID *id);
+/* 向stream中添加一个新的消息 */
 int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_id, streamID *use_id);
 int streamDeleteItem(stream *s, streamID *id);
 int64_t streamTrimByLength(stream *s, long long maxlen, int approx);

@@ -30,14 +30,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rax.h"
 #include <assert.h>
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "log.h"
+#include "rax.h"
 
 #ifndef RAX_MALLOC_INCLUDE
 #define RAX_MALLOC_INCLUDE "rax_malloc.h"
@@ -1417,7 +1418,9 @@ void raxFree(rax *rax) {
 /* Initialize a Rax iterator. This call should be performed a single time
  * to initialize the iterator, and must be followed by a raxSeek() call,
  * otherwise the raxPrev()/raxNext() functions will just return EOF. */
+/* 用于初始化raxIterator结构 */
 void raxStart(raxIterator *it, rax *rt) {
+    /* 默认值为迭代器结束 */
     it->flags = RAX_ITER_EOF; /* No crash if the iterator is not seeked. */
     it->rt = rt;
     it->key_len = 0;
@@ -1669,6 +1672,12 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
  * Return 0 if the seek failed for syntax error or out of memory. Otherwise
  * 1 is returned. When 0 is returned for out of memory, errno is set to
  * the ENOMEM value. */
+/* 在raxStart初始化迭代器后，必须调用raxSeek函数初始化迭代器的位置。
+ * it为raxStart初始化的迭代器
+ * op为查找操作符，可以为大于（>）、小于（<）、大于等于（>=）、小于等于（<=）、等于（=）、首个元素（^）、末尾元素（$）
+ * ele为待查找的key
+ * len为ele的长度
+ */
 int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
     int eq = 0, lt = 0, gt = 0, first = 0, last = 0;
 
@@ -1677,7 +1686,8 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
     it->flags &= ~RAX_ITER_EOF;
     it->key_len = 0;
     it->node = NULL;
-
+    /* 查找末尾元素可以直接在Rax中找到最右侧的叶子节点，查找首个元素被转换为查找大于等于空的操作。
+     */
     /* Set flags according to the operator used to perform the seek. */
     if (op[0] == '>') {
         gt = 1;
@@ -1722,17 +1732,19 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
     /* We need to seek the specified key. What we do here is to actually
      * perform a lookup, and later invoke the prev/next key code that
      * we already use for iteration. */
+    /* 在rax中查找key */
     int splitpos = 0;
     size_t i = raxLowWalk(it->rt,ele,len,&it->node,NULL,&splitpos,&it->stack);
 
     /* Return OOM on incomplete stack info. */
     if (it->stack.oom) return 0;
-
+    /* 如果key找到，并且op中设置了等于，则操作完成 */
     if (eq && i == len && (!it->node->iscompr || splitpos == 0) &&
         it->node->iskey)
     {
         /* We found our node, since the key matches and we have an
          * "equal" condition. */
+        /* 找到该key并且op中设置了=*/
         if (!raxIteratorAddChars(it,ele,len)) return 0; /* OOM. */
         it->data = raxGetData(it->node);
     } else if (lt || gt) {
@@ -1740,7 +1752,11 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
          * key the one represented by the node we stopped at, and perform
          * a next/prev operation to seek. To reconstruct the key at this node
          * we start from the parent and go to the current node, accumulating
-         * the characters found along the way. */
+         * the characters found along the way.
+         * 如果设置了等于但没有找到key，或者设置了大于或者小于符号
+         * 先将查找key的路径中所有匹配的字符，放入迭代器存储key的数组中
+         */
+        /* 将查找过程的最后一个节点放入路径栈 */
         if (!raxStackPush(&it->stack,it->node)) return 0;
         for (size_t j = 1; j < it->stack.items; j++) {
             raxNode *parent = it->stack.stack[j-1];
@@ -1761,12 +1777,14 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
                 if (!raxIteratorAddChars(it,p,1)) return 0;
             }
         }
+        /* 将最后一个节点从路径栈中弹出 */
         raxStackPop(&it->stack);
 
         /* We need to set the iterator in the correct state to call next/prev
          * step in order to seek the desired element. */
         debugf("After initial seek: i=%d len=%d key=%.*s\n",
             (int)i, (int)len, (int)it->key_len, it->key);
+        /* 根据key的匹配情况以及op的参数，在rax中继续查找下一个或者上一个key */
         if (i != len && !it->node->iscompr) {
             /* If we stopped in the middle of a normal node because of a
              * mismatch, add the mismatching character to the current key

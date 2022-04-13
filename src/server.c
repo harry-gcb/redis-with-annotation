@@ -3305,9 +3305,11 @@ void initServer(void) {
 
     /* Create an event handler for accepting new connections in TCP and Unix
      * domain sockets. */
+    /* 接收客户端TCP连接的处理函数为acceptTcpHandler */
     if (createSocketAcceptHandler(&server.ipfd, acceptTcpHandler) != C_OK) {
         serverPanic("Unrecoverable error creating TCP socket accept handler.");
     }
+    /* 接收客户端TLS连接的处理函数为acceptTLSHandler */
     if (createSocketAcceptHandler(&server.tlsfd, acceptTLSHandler) != C_OK) {
         serverPanic("Unrecoverable error creating TLS socket accept handler.");
     }
@@ -3375,11 +3377,13 @@ void InitServerLast() {
 /* Parse the flags string description 'strflags' and set them to the
  * command 'c'. If the flags are all valid C_OK is returned, otherwise
  * C_ERR is returned (yet the recognized flags are set in the command). */
+/* 解析sflags生成flags */
 int populateCommandTableParseFlags(struct redisCommand *c, char *strflags) {
     int argc;
     sds *argv;
 
     /* Split the line into arguments for processing. */
+    /* 分割字符串 */
     argv = sdssplitargs(strflags,&argc);
     if (argv == NULL) return C_ERR;
 
@@ -3439,23 +3443,24 @@ int populateCommandTableParseFlags(struct redisCommand *c, char *strflags) {
 
 /* Populates the Redis Command Table starting from the hard coded list
  * we have on top of server.c file. */
+/* 实现了命令表从数组到字典的转化 */
 void populateCommandTable(void) {
     int j;
+    /* 命令个数 */
     int numcommands = sizeof(redisCommandTable)/sizeof(struct redisCommand);
-
+    /* 遍历命令列表，将每个命令放进字典中 */
     for (j = 0; j < numcommands; j++) {
         struct redisCommand *c = redisCommandTable+j;
         int retval1, retval2;
 
-        /* Translate the command string flags description into an actual
-         * set of flags. */
+        /* 将命令字符串标志描述转换为一组实际的标志 */
         if (populateCommandTableParseFlags(c,c->sflags) == C_ERR)
             serverPanic("Unsupported command flag");
-
+        /* Access Control List */
         c->id = ACLGetCommandID(c->name); /* Assign the ID used for ACL. */
+        /* 将命令名称添加到字典 */
         retval1 = dictAdd(server.commands, sdsnew(c->name), c);
-        /* Populate an additional dictionary that will be unaffected
-         * by rename-command statements in redis.conf. */
+        /* 填充一个不受 redis.conf 中 rename-command 语句影响的附加字典。 */
         retval2 = dictAdd(server.orig_commands, sdsnew(c->name), c);
         serverAssert(retval1 == DICT_OK && retval2 == DICT_OK);
     }

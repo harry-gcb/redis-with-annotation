@@ -94,22 +94,27 @@ int anetBlock(char *err, int fd) {
     return anetSetBlock(err,fd,0);
 }
 
-/* Enable the FD_CLOEXEC on the given fd to avoid fd leaks. 
- * This function should be invoked for fd's on specific places 
- * where fork + execve system calls are called. */
+/* Enable the FD_CLOEXEC on the given fd to avoid fd leaks.
+ * This function should be invoked for fd's on specific places
+ * where fork + execve system calls are called.
+ *
+ * 在给定的 fd 上启用 FD_CLOEXEC 以避免 fd 泄漏。
+ * 应该在调用 fork + execve 系统调用的特定位置为 fd 调用此函数。
+ * */
 int anetCloexec(int fd) {
     int r;
     int flags;
-
+    /* 获取fd原始属性 */
     do {
         r = fcntl(fd, F_GETFD);
     } while (r == -1 && errno == EINTR);
 
     if (r == -1 || (r & FD_CLOEXEC))
         return r;
-
+    /* 赋予FD_CLOEXEC属性 */
     flags = r | FD_CLOEXEC;
 
+    /* 回写fd属性 */
     do {
         r = fcntl(fd, F_SETFD, flags);
     } while (r == -1 && errno == EINTR);

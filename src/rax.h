@@ -210,7 +210,9 @@ void* raxFind(rax* rax, unsigned char* s, size_t len);
 void raxFree(rax *rax);
 /* 释放rax，释放每个key时，都会调用free_callback函数 */
 void raxFreeWithCallback(rax *rax, void (*free_callback)(void*));
+/* 用于初始化raxIterator结构 */
 void raxStart(raxIterator *it, rax *rt);
+/* 初始化迭代器的位置 */
 int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len);
 int raxNext(raxIterator *it);
 int raxPrev(raxIterator *it);

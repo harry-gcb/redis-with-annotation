@@ -444,6 +444,12 @@ void streamGetEdgeID(stream *s, int first, streamID *edge_id)
  *    current top ID is greater or equal. errno will be set to EDOM.
  * 2. If a size of a single element or the sum of the elements is too big to
  *    be stored into the stream. errno will be set to ERANGE. */
+/* 向stream中添加一个新的消息
+ * argv为待插入的消息内容，argv[0]为field_1, argv[1]为value_1，依此类推
+ * numfields为待插入的消息的field的总数
+ * added_id不为空，并且插入成功时，将新插入的消息id写入added_id以供调用方使用
+ * use_id是调用方为该消息定义的消息id，该消息id应该大于s中任意一个消息的id
+ */
 int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_id, streamID *use_id) {
 
     /* Generate the new entry ID. */

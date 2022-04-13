@@ -1125,8 +1125,9 @@ int ACLAuthenticateUser(client *c, robj *username, robj *password) {
  * creates such an ID: it uses sequential IDs, reusing the same ID for the same
  * command name, so that a command retains the same ID in case of modules that
  * are unloaded and later reloaded. */
-unsigned long ACLGetCommandID(const char *cmdname) {
-
+/* 获取权限控制ID */
+unsigned long ACLGetCommandID(const char* cmdname)
+{
     sds lowername = sdsnew(cmdname);
     sdstolower(lowername);
     if (commandId == NULL) commandId = raxNew();

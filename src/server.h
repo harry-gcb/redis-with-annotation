@@ -742,10 +742,12 @@ struct evictionPoolEntry; /* Defined in evict.c */
 
 /* This structure is used in order to represent the output buffer of a client,
  * which is actually a linked list of blocks like that, that is: client->reply. */
+/* client响应链表的节点内容 client->reply*/
 typedef struct clientReplyBlock
 {
-    size_t size, used;
-    char buf[];
+    size_t size;  /* size表示缓冲区空间总大小 */
+    size_t used;  /* used表示缓冲区已使用空间大小 */
+    char   buf[]; /* 缓冲区 */
 } clientReplyBlock;
 
 /* Redis database representation. There are multiple databases identified
@@ -753,14 +755,22 @@ typedef struct clientReplyBlock
  * database. The database number is the 'id' field in the structure. */
 typedef struct redisDb
 {
-    dict *dict;                   /* The keyspace for this DB                   数据库键空间，保存着数据库中的所有键值对*/
-    dict *expires;                /* Timeout of keys with a timeout set         键的过期时间，字典的键为键，字典的值为过期事件 UNIX 时间戳*/
-    dict *blocking_keys;          /* Keys with clients waiting for data (BLPOP) 正处于阻塞状态的键*/
-    dict *ready_keys;             /* Blocked keys that received a PUSH          可以解除阻塞的键*/
-    dict *watched_keys;           /* WATCHED keys for MULTI/EXEC CAS            正在被 WATCH 命令监视的键*/
-    int id;                       /* Database ID                                数据库号码*/
-    long long avg_ttl;            /* Average TTL, just for stats                数据库的键的平均 TTL ，统计信息*/
-    unsigned long expires_cursor; /* Cursor of the active expire cycle.         活动的过期周期的光标。*/
+    /* 数据库键空间，保存着数据库中的所有键值对 */
+    dict *dict; /* The keyspace for this DB*/
+    /* 键的过期时间，字典的键为键，字典的值为过期时间，UNIX 时间戳*/
+    dict *expires; /* Timeout of keys with a timeout set */
+    /* 正处于阻塞状态的键 */
+    dict *blocking_keys; /* Keys with clients waiting for data (BLPOP) */
+    /* 可以解除阻塞的键 */
+    dict *ready_keys; /* Blocked keys that received a PUSH*/
+    /* 正在被 WATCH 命令监视的键 */
+    dict *watched_keys; /* WATCHED keys for MULTI/EXEC CAS*/
+    /* 数据库序号，默认情况下Redis有16个数据库，id序号为0～15 */
+    int id; /* Database ID */
+    /* 数据库的键的平均 TTL ，统计信息 */
+    long long avg_ttl; /* Average TTL, just for stats*/
+    /* 活动的过期周期的光标。*/
+    unsigned long expires_cursor;         /* Cursor of the active expire cycle.*/
     list *defrag_later;           /* List of key names to attempt to defrag one by one, gradually. */
 } redisDb;
 
@@ -907,37 +917,43 @@ typedef struct
 
 typedef struct client
 {
-    uint64_t id;                        /* Client incremental unique ID.            Client唯一自增ID*/
+
+    uint64_t    id; /* Client唯一自增ID，通过全局变量server.next_client_id实现 */
     connection *conn;                   /* client连接*/
-    int resp;                           /* RESP protocol version. Can be 2 or 3.    RESP协议版本*/
-    redisDb *db;                        /* Pointer to currently SELECTed DB.        当前正在使用的数据库*/
-    robj *name;                         /* As set by CLIENT SETNAME.                客户端的名字*/
-    sds querybuf;                       /* Buffer we use to accumulate client queries. */
+    int         resp;                   /* RESP协议版本，可以为2或者3 */
+    redisDb *   db;                     /* client使用select命令选择的数据库对象 */
+    robj *      name; /* 客户端名称，可以使用命令CLIENT SETNAME设置 */
+    sds         querybuf; /* 输入缓冲区，recv函数接收的客户端命令请求会暂时缓存在此缓冲区 */
     size_t qb_pos;                      /* The position we have read in querybuf. */
     sds pending_querybuf;               /* If this client is flagged as master, this buffer
                                            represents the yet not applied portion of the
                                            replication stream that we are receiving from
                                            the master. */
     size_t querybuf_peak;               /* Recent (100ms or more) peak of querybuf size. */
-    int argc;                           /* Num of arguments of current command. */
+    int         argc; /* 输入缓冲区的命令请求是按照Redis协议格式编码字符串，
+                       * 需要解析出命令请求的所有参数，参数个数存储在argc字段，
+                       * 参数内容被解析为robj对象，存储在argv数组
+                       */
     robj **argv;                        /* Arguments of current command. */
     int original_argc;                  /* Num of arguments of original command if arguments were rewritten. */
     robj **original_argv;               /* Arguments of original command if arguments were rewritten. */
     size_t argv_len_sum;                /* Sum of lengths of objects in argv list. */
-    struct redisCommand *cmd, *lastcmd; /* Last command executed. */
+    struct redisCommand *cmd;           /* 待执行的客户端命令；解析命令请求后，
+                                         * 会根据命令名称查找该命令对应的命令对象，存储在客户端cmd字段
+                                         */
+    struct redisCommand *lastcmd;       /* Last command executed. */
     user *user;                         /* User associated with this connection. If the
                                            user is set to NULL the connection can do
                                            anything (admin). */
     int reqtype;                        /* Request protocol type: PROTO_REQ_* */
     int multibulklen;                   /* Number of multi bulk arguments left to read. */
     long bulklen;                       /* Length of bulk argument in multi bulk request. */
-    list *reply;                        /* List of reply objects to send to the client. */
-    unsigned long long reply_bytes;     /* Tot bytes of objects in reply list. */
-    size_t sentlen;                     /* Amount of bytes already sent in the current
-                                           buffer or object being sent. */
+    list *             reply; /* 输出链表，存储待返回给客户端的命令回复数据 */
+    unsigned long long reply_bytes; /* 输出链表中所有节点的存储空间总和 */
+    size_t sentlen; /* 已返回给客户端的字节数，或者对象正在发送的字节数 */
     time_t ctime;                       /* Client creation time. */
     long duration;                      /* Current command duration. Used for measuring latency of blocking/non-blocking cmds */
-    time_t lastinteraction;             /* Time of the last interaction, used for timeout */
+    time_t        lastinteraction; /* 客户端上次与服务器交互的时间，以此实现客户端的超时处理 */
     time_t obuf_soft_limit_reached_time;
     uint64_t flags;                           /* Client flags: CLIENT_* macros. */
     int authenticated;                        /* Needed when the default user requires auth. */
@@ -995,8 +1011,12 @@ typedef struct client
     uint64_t client_cron_last_memory_usage;
     int client_cron_last_memory_type;
     /* Response buffer */
-    int bufpos;
-    char buf[PROTO_REPLY_CHUNK_BYTES];
+    int bufpos;                        /* 表示输出缓冲区中数据的最大字节位置 */
+    char buf[PROTO_REPLY_CHUNK_BYTES]; /* 输出缓冲区，存储待返回给客户端的命令回复数据
+                                        * 显然sentlen～bufpos区间的数据都是需要返回给客户端的
+                                        * 可以看到reply和buf都用于缓存待返回给客户端的命令回复数据
+                                        * 但是二者用于返回不同的数据类型不同
+                                        */
 } client;
 
 struct saveparam
@@ -1238,10 +1258,10 @@ typedef enum childInfoType
 struct redisServer
 {
     /* General */
-    pid_t pid;                /* Main process pid.                  主进程id */
-    pthread_t main_thread_id; /* Main thread id                     主线程id*/
-    char *configfile;         /* Absolute config file path, or NULL 配置文件的绝对路径 */
-    char *executable;         /* Absolute executable file path.     可执行文件的绝对路径 */
+    pid_t                    pid;               /* 主进程id */
+    pthread_t                main_thread_id;    /* 主线程id */
+    char *                   configfile;        /* 配置文件绝对路径 */
+    char *                   executable;        /* 可执行文件的绝对路径 */
     char **exec_argv;         /* Executable argv vector (copy). */
     int dynamic_hz;           /* Change hz value depending on # of clients. */
     int config_hz;            /* Configured HZ value. May be different than
@@ -1250,10 +1270,11 @@ struct redisServer
     mode_t umask;             /* The umask value of the process on startup */
     int hz;                   /* serverCron() calls frequency in hertz */
     int in_fork_child;        /* indication that this is a fork child */
-    redisDb *db;              /* 数组，保存着服务器中的所有数据库 */
-    dict *commands;           /* Command table */
+    redisDb *                db; /* 数据库数组，数组的每个元素都是redisDb类型，
+                                  * 保存着服务器中的所有数据库 */
+    dict *                   commands; /*命令字典，Redis支持的所有命令都存储在这个字典中，key为命令名称 */
     dict *orig_commands;      /* Command table before command renaming. */
-    aeEventLoop *el;          /* 事件状态 */
+    aeEventLoop *            el; /* el代表Redis的事件循环，类型为aeEventLoop */
     rax *errors;                         /* Errors table */
     redisAtomic unsigned int lruclock;   /* Clock for LRU eviction */
     volatile sig_atomic_t shutdown_asap; /* SHUTDOWN needed ASAP */
@@ -1283,18 +1304,18 @@ struct redisServer
     int child_type;             /* Type of current child */
     client *module_client;      /* "Fake" client to call Redis from modules */
     /* Networking */
-    int port;                                 /* TCP listening port */
+    int port; /* 服务器监听的TCP端口号，可通过参数port配置，默认端口号6379 */
     int tls_port;                             /* TLS listening port */
     int tcp_backlog;                          /* TCP listen() backlog */
-    char *bindaddr[CONFIG_BINDADDR_MAX];      /* Addresses we should bind to */
-    int bindaddr_count;                       /* Number of addresses in server.bindaddr[] */
+    char *bindaddr[CONFIG_BINDADDR_MAX]; /* 绑定的所有IP地址，可以通过参数bind配置多个 */
+    int       bindaddr_count;            /* 用户配置的IP地址数目 server.bindaddr[] */
     char *unixsocket;                         /* UNIX socket path */
     mode_t unixsocketperm;                    /* UNIX socket permission */
-    socketFds ipfd;                           /* TCP socket file descriptors */
+    socketFds ipfd; /* 针对bindaddr字段的所有IP地址创建的socket文件描述符 */
     socketFds tlsfd;                          /* TLS socket file descriptors */
     int sofd;                                 /* Unix socket file descriptor */
     socketFds cfd;                            /* Cluster bus listening socket */
-    list *clients;                            /* 链表，保存了所有客户端状态结构 List of active clients */
+    list *    clients;                        /* 当前连接到Redis服务器的所有客户端 */
     list *clients_to_close;                   /* 链表，保存了所有待关闭的客户端 Clients to close asynchronously */
     list *clients_pending_write;              /* There is to write or install handler. */
     list *clients_pending_read;               /* Client has pending read socket buffers. */
@@ -1325,6 +1346,9 @@ struct redisServer
     time_t loading_start_time;
     off_t loading_process_events_interval_bytes;
     /* Fast pointers to often looked up command */
+    /* 在服务器初始化的时候将命令缓存在redisServer对象，
+     * 这样使用的时候就不需要每次都从commands字典中查找了
+     */
     struct redisCommand *delCommand, *multiCommand, *lpushCommand,
         *lpopCommand, *rpopCommand, *zpopminCommand,
         *zpopmaxCommand, *sremCommand, *execCommand,
@@ -1388,7 +1412,11 @@ struct redisServer
     } inst_metric[STATS_METRIC_COUNT];
     /* Configuration */
     int verbosity;             /* Loglevel in redis.conf */
-    int maxidletime;           /* Client timeout in seconds */
+    int maxidletime;           /* 最大空闲时间，可通过参数timeout配置
+                                * 结合client对象的lastinteraction字段
+                                * 当客户端没有与服务器交互的时间超过maxidletime时
+                                * 会认为客户端超时并释放该客户端连接
+                                */
     int tcpkeepalive;          /* Set SO_KEEPALIVE if non-zero. */
     int active_expire_enabled; /* Can be disabled for testing purposes. */
     int active_expire_effort;  /* From 1 (default) to 10, active effort. */
@@ -1403,7 +1431,7 @@ struct redisServer
     int active_defrag_cycle_max;                 /* maximal effort for defrag in CPU percentage */
     unsigned long active_defrag_max_scan_fields; /* maximum number of fields of set/hash/zset/list to process from within the main dict scan */
     size_t client_max_querybuf_len;              /* Limit for client query buffer length */
-    int dbnum;                                   /* 服务器的数据库数量 Total number of configured DBs */
+    int           dbnum; /* 数据库的数目，可通过参数databases配置，默认16 */
     int supervised;                              /* 1 if supervised, 0 otherwise. */
     int supervised_mode;                         /* See SUPERVISED_* */
     int daemonize;                               /* True if running as a daemon */
@@ -1723,11 +1751,16 @@ typedef void redisCommandProc(client *c);
 typedef int redisGetKeysProc(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result);
 struct redisCommand
 {
-    char *name;
-    redisCommandProc *proc;
-    int arity;
-    char *sflags;   /* Flags as string representation, one char per flag. */
-    uint64_t flags; /* The actual flags, obtained from the 'sflags' field. */
+    char *            name;  /* 命令名称*/
+    redisCommandProc *proc;  /* 命令处理函数 */
+    int               arity; /* 命令参数数目，用于校验命令请求格式是否正确
+                              * 当arity小于0时，表示命令参数数目大于等于arity
+                              * 当arity大于0时，表示命令参数数目必须为arity
+                              * 注意命令请求中，命令的名称本身也是一个参数，
+                              * 如get命令的参数数目为2，命令请求格式为get key
+                              */
+    char *   sflags;         /* 命令标志，例如标识命令时读命令还是写命令 */
+    uint64_t flags; /* 命令的二进制标志，服务器启动时解析sflags字段生成 */
     /* Use a function to determine keys arguments in a command line.
      * Used for Redis Cluster redirect. */
     redisGetKeysProc *getkeys_proc;
@@ -1735,7 +1768,10 @@ struct redisCommand
     int firstkey; /* The first argument that's a key (0 = no keys) */
     int lastkey;  /* The last argument that's a key */
     int keystep;  /* The step between first and last key */
-    long long microseconds, calls, rejected_calls, failed_calls;
+    /* 可计算出该命令的平均处理时间，用于统计 */
+    long long microseconds; /* 从服务器启动至今命令总的执行时间 */
+    long long calls;        /* 从服务器启动至今命令执行的次数，用于统计 */
+    long long rejected_calls, failed_calls;
     int id; /* Command ID. This is a progressive ID starting from 0 that
                is assigned at runtime, and is used in order to check
                ACLs. A connection is able to execute a given command if
@@ -2049,7 +2085,10 @@ void beforePropagateMulti();
 void afterPropagateExec();
 
 /* Redis object implementation */
+/* redis对象类型的实现 */
+/* 对象减少引用计数 */
 void decrRefCount(robj *o);
+/* void*对象减少引用计数（调用decrRefCount） */
 void decrRefCountVoid(void *o);
 void incrRefCount(robj *o);
 robj *makeObjectShared(robj *o);
@@ -2326,7 +2365,7 @@ void serverLogFromHandler(int level, const char *msg);
 void usage(void);
 void updateDictResizePolicy(void);
 int htNeedsResize(dict *dict);
-void populateCommandTable(void);
+void         populateCommandTable(void); /* 实现了命令表从数组到字典的转化 */
 void resetCommandTableStats(void);
 void resetErrorTableStats(void);
 void adjustOpenFilesLimit(void);

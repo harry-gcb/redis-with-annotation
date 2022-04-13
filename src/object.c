@@ -373,8 +373,10 @@ void incrRefCount(robj *o) {
     }
 }
 
+/* 减少引用计数 */
 void decrRefCount(robj *o) {
     if (o->refcount == 1) {
+        /* 根据对象类型，释放其指向的数据结构空间 */
         switch(o->type) {
         case OBJ_STRING: freeStringObject(o); break;
         case OBJ_LIST: freeListObject(o); break;
@@ -385,9 +387,11 @@ void decrRefCount(robj *o) {
         case OBJ_STREAM: freeStreamObject(o); break;
         default: serverPanic("Unknown object type"); break;
         }
+        /* 释放对象空间 */
         zfree(o);
     } else {
         if (o->refcount <= 0) serverPanic("decrRefCount against refcount <= 0");
+        /* 引用计数减1 */
         if (o->refcount != OBJ_SHARED_REFCOUNT) o->refcount--;
     }
 }
@@ -395,6 +399,7 @@ void decrRefCount(robj *o) {
 /* This variant of decrRefCount() gets its argument as void, and is useful
  * as free method in data structures that expect a 'void free_object(void*)'
  * prototype for the free method. */
+/* 减少引用计数 */
 void decrRefCountVoid(void *o) {
     decrRefCount(o);
 }
