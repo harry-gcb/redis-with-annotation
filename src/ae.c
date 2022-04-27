@@ -214,7 +214,15 @@ int aeGetFileEvents(aeEventLoop *eventLoop, int fd) {
     return fe->mask;
 }
 
-/* 创建时间事件 */
+/* 创建时间事件
+ * eventLoop：输入参数指向事件循环结构体
+ * milliseconds：表示此时间事件触发时间，单位毫秒，
+ *               注意这是一个相对时间，即从当前时间算起，
+ *               milliseconds毫秒后此时间事件会被触发
+ * proc：指向时间事件的处理函数
+ * clientData：指向对应的结构体对象
+ * finalizerProc：删除时间事件节点之前会调用此函数
+ */
 long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
         aeTimeProc *proc, void *clientData,
         aeEventFinalizerProc *finalizerProc)
@@ -283,7 +291,7 @@ static int64_t usUntilEarliestTimer(aeEventLoop *eventLoop) {
     return (now >= earliest->when) ? 0 : earliest->when - now;
 }
 
-/* Process time events */
+/* 处理所有已到达的时间事件 */
 static int processTimeEvents(aeEventLoop *eventLoop) {
     int processed = 0;
     aeTimeEvent *te;

@@ -33,7 +33,7 @@
 
 /* 事件状态 */
 typedef struct aeApiState {
-    int                 epfd;   /* epoll_event 实例描述符 */
+    int epfd;                   /* epoll_event 实例描述符 */
     struct epoll_event *events; /* 事件槽 */
 } aeApiState;
 
@@ -120,9 +120,10 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
 static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
     aeApiState *state = eventLoop->apidata;
     int retval, numevents = 0;
-    /* 等待事件 */
-    retval = epoll_wait(state->epfd,state->events,eventLoop->setsize,
-            tvp ? (tvp->tv_sec*1000 + (tvp->tv_usec + 999)/1000) : -1);
+    /* 阻塞等待事件 */
+    retval = epoll_wait(
+        state->epfd, state->events, eventLoop->setsize,
+        tvp ? (tvp->tv_sec * 1000 + (tvp->tv_usec + 999) / 1000) : -1);
     /* 至少有一个事件准备就绪 */
     if (retval > 0) {
         int j;

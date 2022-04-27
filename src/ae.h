@@ -83,7 +83,8 @@ typedef struct aeFileEvent {
     int         mask;       /* 监听事件类型掩码，one of AE_(READABLE|WRITABLE|BARRIER) */
     aeFileProc *rfileProc;  /* 读事件处理器 */
     aeFileProc *wfileProc;  /* 写事件处理器 */
-    void *      clientData; /* 多路复用库的私有数据 */
+    void *clientData;       /* 多路复用库的私有数据，
+                             * 指向对应的客户端对象 */
 } aeFileEvent;
 
 /* Time event structure */

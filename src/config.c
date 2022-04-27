@@ -387,13 +387,14 @@ void initConfigValues() {
     }
 }
 
+/* 从配置文件内容中加载服务器配置 */
 void loadServerConfigFromString(char *config) {
     const char *err = NULL;
     int linenum = 0, totlines, i;
     int slaveof_linenum = 0;
     sds *lines;
     int save_loaded = 0;
-
+    /* 分割配置多行字符串，totlines记录行数 */
     lines = sdssplitlen(config,strlen(config),"\n",1,&totlines);
 
     for (i = 0; i < totlines; i++) {
@@ -401,27 +402,30 @@ void loadServerConfigFromString(char *config) {
         int argc;
 
         linenum = i+1;
+        /* 移除字符串的前置空白和后缀空白 */
         lines[i] = sdstrim(lines[i]," \t\r\n");
 
-        /* Skip comments and blank lines */
+        /* 跳过注释行与空行 */
         if (lines[i][0] == '#' || lines[i][0] == '\0') continue;
 
-        /* Split into arguments */
+        /* 将字符串分割成多个参数 */
         argv = sdssplitargs(lines[i],&argc);
         if (argv == NULL) {
             err = "Unbalanced quotes in configuration line";
             goto loaderr;
         }
 
-        /* Skip this line if the resulting command vector is empty. */
+        /* 跳过空白参数 */
         if (argc == 0) {
             sdsfreesplitres(argv,argc);
             continue;
         }
+        /* 将选项名字转换成小写 例如 TIMEOUT 转换成 timeout */
         sdstolower(argv[0]);
 
         /* Iterate the configs that are standard */
         int match = 0;
+        /* 解析并设置配置参数 */
         for (standardConfig *config = configs; config->name != NULL; config++) {
             if ((!strcasecmp(argv[0],config->name) ||
                 (config->alias && !strcasecmp(argv[0],config->alias))))
@@ -644,12 +648,18 @@ loaderr:
  * Both filename and options can be NULL, in such a case are considered
  * empty. This way loadServerConfig can be used to just load a file or
  * just load a string. */
+/* 从给定文件中载入服务器配置
+ * config_from_stdin是从输入获取配置
+ * options 字符串会被追加到文件所载入的内容的后面
+ * filename 和 options 都可以是 NULL ，在这种情况下服务器配置文件视为空文件。
+ */
 void loadServerConfig(char *filename, char config_from_stdin, char *options) {
     sds config = sdsempty();
     char buf[CONFIG_MAX_LINE+1];
     FILE *fp;
 
     /* Load the file content */
+    /* 载入文件内容 */
     if (filename) {
         if ((fp = fopen(filename,"r")) == NULL) {
             serverLog(LL_WARNING,
@@ -662,6 +672,7 @@ void loadServerConfig(char *filename, char config_from_stdin, char *options) {
         fclose(fp);
     }
     /* Append content from stdin */
+    /* 追加stdin输入到文件内容的末尾 */
     if (config_from_stdin) {
         serverLog(LL_WARNING,"Reading config from stdin");
         fp = stdin;
@@ -670,10 +681,12 @@ void loadServerConfig(char *filename, char config_from_stdin, char *options) {
     }
 
     /* Append the additional options */
+    /*  追加 options 字符串到内容的末尾 */
     if (options) {
         config = sdscat(config,"\n");
         config = sdscat(config,options);
     }
+    /* 根据字符串内容，设置服务器配置 */
     loadServerConfigFromString(config);
     sdsfree(config);
 }

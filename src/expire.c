@@ -69,28 +69,52 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
  * it will get more aggressive to avoid that too much memory is used by
  * keys that can be removed from the keyspace.
  *
+ *
+函数尝试删除数据库中已经过期的键。当带有过期时间的键比较少时，函数运行得比较保守，
+ *
+如果带有过期时间的键比较多，那么函数会以更积极的方式来删除过期键，从而可能地释放被过期键占用的内存。
+ *
  * Every expire cycle tests multiple databases: the next call will start
  * again from the next db. No more than CRON_DBS_PER_CALL databases are
  * tested at every iteration.
+ *
+ * 每个过期周期都会测试多个数据库：下一次调用将从下一个数据库重新开始。
+ * 每次循环中被测试的数据库数目不会超过 REDIS_DBCRON_DBS_PER_CALL
  *
  * The function can perform more or less work, depending on the "type"
  * argument. It can execute a "fast cycle" or a "slow cycle". The slow
  * cycle is the main way we collect expired cycles: this happens with
  * the "server.hz" frequency (usually 10 hertz).
  *
+ * 该函数可以执行或多或少的工作，具体取决于“类型”参数,
+ * 它可以执行“快循环”或“慢循环”。
+ * 慢周期是我们收集过期周期的主要方式：这发生在“server.hz”频率（通常为 10
+ * 赫兹）。
+ *
  * However the slow cycle can exit for timeout, since it used too much time.
  * For this reason the function is also invoked to perform a fast cycle
  * at every event loop cycle, in the beforeSleep() function. The fast cycle
  * will try to perform less work, but will do it much more often.
  *
+ * 然而，慢循环可以退出超时，因为它使用了太多时间。 因此，在 beforeSleep()
+ * 函数中，还调用该函数以在每个事件循环周期执行快速循环。
+ * 快速循环将尝试执行更少的工作，但会更频繁地执行此操作。
+ *
  * The following are the details of the two expire cycles and their stop
  * conditions:
  *
+ * 以下是两个过期周期及其停止条件的详细信息：
+ *
  * If type is ACTIVE_EXPIRE_CYCLE_FAST the function will try to run a
- * "fast" expire cycle that takes no longer than ACTIVE_EXPIRE_CYCLE_FAST_DURATION
- * microseconds, and is not repeated again before the same amount of time.
- * The cycle will also refuse to run at all if the latest slow cycle did not
- * terminate because of a time limit condition.
+ * "fast" expire cycle that takes no longer than
+ * ACTIVE_EXPIRE_CYCLE_FAST_DURATION microseconds, and is not repeated again
+ * before the same amount of time. The cycle will also refuse to run at all if
+ * the latest slow cycle did not terminate because of a time limit condition.
+ *
+ * 如果循环的类型为 ACTIVE_EXPIRE_CYCLE_FAST，那么函数会以“快速过期”模式执行，
+ * 执行的时间不会超过 EXPIRE_FAST_CYCLE_DURATION 毫秒，并且在
+ * EXPIRE_FAST_CYCLE_DURATION 毫秒之内不会再重新执行。
+ * 如果最近的慢循环由于时间限制条件没有终止，则循环也将完全拒绝运行。
  *
  * If type is ACTIVE_EXPIRE_CYCLE_SLOW, that normal expire cycle is
  * executed, where the time limit is a percentage of the REDIS_HZ period
@@ -100,8 +124,16 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
  * a given percentage, in order to avoid doing too much work to gain too
  * little memory.
  *
+ * 如果 type 是 ACTIVE_EXPIRE_CYCLE_SLOW，则执行正常的过期周期，其中时间限制是
+ * ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC 定义指定的 REDIS_HZ 周期的百分比。
+ * 在快速循环中，一旦数据库中已经过期的键的数量估计低于给定的百分比，
+ * 就会中断对每个数据库的检查，以避免做太多工作而获得太少的内存。
+ *
  * The configured expire "effort" will modify the baseline parameters in
  * order to do more work in both the fast and slow expire cycles.
+ *
+ * 配置的过期“努力”将修改基线参数，以便在快速和慢速过期周期中做更多的工作。
+ *
  */
 
 #define ACTIVE_EXPIRE_CYCLE_KEYS_PER_LOOP 20 /* Keys for each DB loop. */
@@ -113,33 +145,41 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
 void activeExpireCycle(int type) {
     /* Adjust the running parameters according to the configured expire
      * effort. The default effort is 1, and the maximum configurable effort
-     * is 10. */
-    unsigned long
-    effort = server.active_expire_effort-1, /* Rescale from 0 to 9. */
-    config_keys_per_loop = ACTIVE_EXPIRE_CYCLE_KEYS_PER_LOOP +
-                           ACTIVE_EXPIRE_CYCLE_KEYS_PER_LOOP/4*effort,
-    config_cycle_fast_duration = ACTIVE_EXPIRE_CYCLE_FAST_DURATION +
-                                 ACTIVE_EXPIRE_CYCLE_FAST_DURATION/4*effort,
-    config_cycle_slow_time_perc = ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC +
-                                  2*effort,
-    config_cycle_acceptable_stale = ACTIVE_EXPIRE_CYCLE_ACCEPTABLE_STALE-
-                                    effort;
+     * is 10.
+     * 根据配置的过期努力调整运行参数。 默认工作量为 1，最大可配置工作量为 10。
+     * */
+    /* Rescale from 0 to 9. */
+    unsigned long effort = server.active_expire_effort - 1;
+    unsigned long config_keys_per_loop =
+        ACTIVE_EXPIRE_CYCLE_KEYS_PER_LOOP +
+        ACTIVE_EXPIRE_CYCLE_KEYS_PER_LOOP / 4 * effort;
+    unsigned long config_cycle_fast_duration =
+        ACTIVE_EXPIRE_CYCLE_FAST_DURATION +
+        ACTIVE_EXPIRE_CYCLE_FAST_DURATION / 4 * effort;
+    unsigned long config_cycle_slow_time_perc =
+        ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC +
+        2 * effort; /* CPU的最大使用率 25% ~ 45%*/
+    unsigned long config_cycle_acceptable_stale =
+        ACTIVE_EXPIRE_CYCLE_ACCEPTABLE_STALE - effort;
 
     /* This function has some global state in order to continue the work
      * incrementally across calls. */
-    static unsigned int current_db = 0; /* Next DB to test. */
-    static int timelimit_exit = 0;      /* Time limit hit in previous call? */
-    static long long last_fast_cycle = 0; /* When last fast cycle ran. */
+    /* 静态变量，用来累积函数连续执行时的数据 */
+    static unsigned int current_db = 0; /* 下一个要处理的db */
+    static int timelimit_exit = 0;      /* 上次调用中的时间限制？? */
+    static long long last_fast_cycle = 0; /* 上次快速循环何时运行 */
 
     int j, iteration = 0;
-    int dbs_per_call = CRON_DBS_PER_CALL;
-    long long start = ustime(), timelimit, elapsed;
+    int dbs_per_call = CRON_DBS_PER_CALL; /* 默认每次处理的数据库数量（16个） */
+    long long start = ustime();           /* 函数开始的时间 */
+    long long timelimit, elapsed;
 
     /* When clients are paused the dataset should be static not just from the
      * POV of clients not being able to write, but also from the POV of
      * expires and evictions of keys not being performed. */
     if (checkClientPauseTimeoutAndReturnIfPaused()) return;
 
+    /* 快速模式 */
     if (type == ACTIVE_EXPIRE_CYCLE_FAST) {
         /* Don't start a fast cycle if the previous cycle did not exit
          * for time limit, unless the percentage of estimated stale keys is
@@ -169,6 +209,11 @@ void activeExpireCycle(int type) {
      * time per iteration. Since this function gets called with a frequency of
      * server.hz times per second, the following is the max amount of
      * microseconds we can spend in this function. */
+    /* 添加时间限制，防止处理过期键占用太长时间
+     * 假设server.hz为10，每秒activeExpireCycle执行10次，
+     * 那么activeExpireCycle执行时间为
+     * (config_cycle_slow_time_perc/100) * (1000000/10)（us）
+     */
     timelimit = config_cycle_slow_time_perc*1000000/server.hz/100;
     timelimit_exit = 0;
     if (timelimit <= 0) timelimit = 1;
@@ -182,6 +227,7 @@ void activeExpireCycle(int type) {
     long total_sampled = 0;
     long total_expired = 0;
 
+    /* 最多遍历dbs_per_call个数据库 */
     for (j = 0; j < dbs_per_call && timelimit_exit == 0; j++) {
         /* Expired and checked in a single loop. */
         unsigned long expired, sampled;
@@ -284,10 +330,9 @@ void activeExpireCycle(int type) {
                 db->avg_ttl = (db->avg_ttl/50)*49 + (avg_ttl/50);
             }
 
-            /* We can't block forever here even if there are many keys to
-             * expire. So after a given amount of milliseconds return to the
-             * caller waiting for the other active expire cycle. */
-            if ((iteration & 0xf) == 0) { /* check once every 16 iterations. */
+            /* 即使有很多密钥要过期，我们也不能在这里永远阻塞。
+             * 所以在给定的毫秒数之后返回调用者等待另一个活跃的过期周期。 */
+            if ((iteration & 0xf) == 0) { /* 每16次迭代检查一次 */
                 elapsed = ustime()-start;
                 if (elapsed > timelimit) {
                     timelimit_exit = 1;

@@ -45,13 +45,15 @@ robj *setTypeCreate(sds value) {
     return createSetObject();
 }
 
-/* Add the specified value into a set.
- *
- * If the value was already member of the set, nothing is done and 0 is
- * returned, otherwise the new element is added and 1 is returned. */
+/* 添加指定的值到一个set
+ * 如果这个值已经存在，啥都不做返回0
+ * 否则将原始添加到set，返回1
+ */
 int setTypeAdd(robj *subject, sds value) {
     long long llval;
+    /* set底层编码类型为字典 */
     if (subject->encoding == OBJ_ENCODING_HT) {
+        /* value 作为键， NULL 作为值，将元素添加到字典中 */
         dict *ht = subject->ptr;
         dictEntry *de = dictAddRaw(ht,value,NULL);
         if (de) {
@@ -59,7 +61,8 @@ int setTypeAdd(robj *subject, sds value) {
             dictSetVal(ht,de,NULL);
             return 1;
         }
-    } else if (subject->encoding == OBJ_ENCODING_INTSET) {
+    } else if (subject->encoding == OBJ_ENCODING_INTSET) /* intset */ {
+        /* 如果对象的值可以编码为整数的话，那么将对象的值添加到 intset 中 */
         if (isSdsRepresentableAsLongLong(value,&llval) == C_OK) {
             uint8_t success = 0;
             subject->ptr = intsetAdd(subject->ptr,llval,&success);
@@ -68,6 +71,7 @@ int setTypeAdd(robj *subject, sds value) {
                  * too many entries. */
                 size_t max_entries = server.set_max_intset_entries;
                 /* limit to 1G entries due to intset internals. */
+                /* 添加成功，检查集合在添加新元素之后是否需要转换为字典*/
                 if (max_entries >= 1<<30) max_entries = 1<<30;
                 if (intsetLen(subject->ptr) > max_entries)
                     setTypeConvert(subject,OBJ_ENCODING_HT);
@@ -75,6 +79,8 @@ int setTypeAdd(robj *subject, sds value) {
             }
         } else {
             /* Failed to get integer from object, convert to regular set. */
+            /* 如果对象的值不能编码为整数，那么将集合从 intset 编码转换为 HT
+             * 编码，然后再执行添加操作 */
             setTypeConvert(subject,OBJ_ENCODING_HT);
 
             /* The set *was* an intset and this value is not integer

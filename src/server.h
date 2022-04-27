@@ -490,9 +490,8 @@ typedef enum
 /* Get the first bind addr or NULL */
 #define NET_FIRST_BIND_ADDR (server.bindaddr_count ? server.bindaddr[0] : NULL)
 
-/* Using the following macro you can run code inside serverCron() with the
- * specified period, specified in milliseconds.
- * The actual resolution depends on server.hz. */
+/* 使用以下宏，您可以在 serverCron() 中以指定的时间段（以毫秒为单位）运行代码。
+ * 实际分辨率取决于 server.hz。*/
 #define run_with_period(_ms_) if ((_ms_ <= 1000 / server.hz) || !(server.cronloops % ((_ms_) / (1000 / server.hz))))
 
 /* We can print the stacktrace, so our assert is defined this way: */
@@ -508,11 +507,11 @@ typedef enum
 
 /* The actual Redis Object */
 /* 对象类型 */
-#define OBJ_STRING 0 /* String object.      字符串对象*/
-#define OBJ_LIST 1   /* List object.        列表对象*/
-#define OBJ_SET 2    /* Set object.         集合对象*/
-#define OBJ_ZSET 3   /* Sorted set object.  有序集合对象*/
-#define OBJ_HASH 4   /* Hash object.        哈希对象*/
+#define OBJ_STRING 0 /* 字符串对象 */
+#define OBJ_LIST 1   /* 列表对象 */
+#define OBJ_SET 2    /* 集合对象 */
+#define OBJ_ZSET 3   /* 有序集合对象 */
+#define OBJ_HASH 4   /* 哈希对象 */
 
 /* The "module" object type is a special one that signals that the object
  * is one directly managed by a Redis module. In this case the value points
@@ -915,9 +914,7 @@ typedef struct
                                       need more reserved IDs use UINT64_MAX-1, \
                                       -2, ... and so forth. */
 
-typedef struct client
-{
-
+typedef struct client {
     uint64_t    id; /* Client唯一自增ID，通过全局变量server.next_client_id实现 */
     connection *conn;                   /* client连接*/
     int         resp;                   /* RESP协议版本，可以为2或者3 */
@@ -1268,23 +1265,26 @@ struct redisServer
                                  the actual 'hz' field value if dynamic-hz
                                  is enabled. */
     mode_t umask;             /* The umask value of the process on startup */
-    int hz;                   /* serverCron() calls frequency in hertz */
+    int hz; /* erverCron函数的执行频率，用户可配置，最小为1最大为500，默认为10
+             */
     int in_fork_child;        /* indication that this is a fork child */
-    redisDb *                db; /* 数据库数组，数组的每个元素都是redisDb类型，
-                                  * 保存着服务器中的所有数据库 */
-    dict *                   commands; /*命令字典，Redis支持的所有命令都存储在这个字典中，key为命令名称 */
-    dict *orig_commands;      /* Command table before command renaming. */
-    aeEventLoop *            el; /* el代表Redis的事件循环，类型为aeEventLoop */
+    redisDb *db; /* 数据库数组，数组的每个元素都是redisDb类型，
+                  * 保存着服务器中的所有数据库 */
+    dict *commands; /* 命令字典,Redis支持的所有命令都存储在这个字典,
+                     * key为命令名 */
+    dict *orig_commands; /* Command table before command renaming. */
+    aeEventLoop *el; /* el代表Redis的事件循环，类型为aeEventLoop */
     rax *errors;                         /* Errors table */
     redisAtomic unsigned int lruclock;   /* Clock for LRU eviction */
     volatile sig_atomic_t shutdown_asap; /* SHUTDOWN needed ASAP */
-    int activerehashing;                 /* Incremental rehash in serverCron() */
+    int activerehashing; /* 在执行 serverCron() 时进行渐进式 rehash */
     int active_defrag_running;           /* Active defragmentation running (holds current scan aggressiveness) */
-    char *pidfile;                       /* PID file path */
-    int arch_bits;                       /* 32 or 64 depending on sizeof(long) */
-    int cronloops;                       /* Number of times the cron function run */
-    char runid[CONFIG_RUN_ID_SIZE + 1];  /* ID always different at every exec. */
-    int sentinel_mode;                   /* True if this instance is a Sentinel. */
+    char *pidfile;                       /* PID 文件路径 PID file path */
+    int arch_bits; /* 架构类型 32 or 64 depending on sizeof(long) */
+    int cronloops; /* 记录serverCron函数的执行次数 */
+    char runid[CONFIG_RUN_ID_SIZE + 1]; /* 本服务器的 RUN ID
+                                         * ID always different at every exec. */
+    int sentinel_mode; /* 服务器是否运行在 SENTINEL 模式 */
     size_t initial_memory_usage;         /* Bytes used after initialization. */
     int always_show_logo;                /* Show logo even for non-stdout logging. */
     int in_eval;                         /* Are we inside EVAL? */
@@ -1700,9 +1700,9 @@ struct redisServer
     /* ACLs */
     char *acl_filename;           /* ACL Users file. NULL if not configured. */
     unsigned long acllog_max_len; /* Maximum length of the ACL LOG list. */
-    sds requirepass;              /* Remember the cleartext password set with
-                                     the old "requirepass" directive for
-                                     backward compatibility with Redis <= 5. */
+    sds requirepass; /* 是否设置了密码 Remember the cleartext password set with
+                        the old "requirepass" directive for
+                        backward compatibility with Redis <= 5. */
     int acl_pubsub_default;       /* Default ACL pub/sub channels flag */
     /* Assert & bug reporting */
     int watchdog_period; /* Software watchdog period in ms. 0 = off */
@@ -1759,7 +1759,7 @@ struct redisCommand
                               * 注意命令请求中，命令的名称本身也是一个参数，
                               * 如get命令的参数数目为2，命令请求格式为get key
                               */
-    char *   sflags;         /* 命令标志，例如标识命令时读命令还是写命令 */
+    char *sflags; /* 命令标志，例如标识命令时读命令还是写命令 */
     uint64_t flags; /* 命令的二进制标志，服务器启动时解析sflags字段生成 */
     /* Use a function to determine keys arguments in a command line.
      * Used for Redis Cluster redirect. */
@@ -2589,7 +2589,7 @@ void handleBlockedClientsTimeout(void);
 int clientsCronHandleTimeout(client *c, mstime_t now_ms);
 
 /* expire.c -- Handling of expired keys */
-void activeExpireCycle(int type);
+void activeExpireCycle(int type); /* 处理数据库中过期的键 */
 void expireSlaveKeys(void);
 void rememberSlaveKeyWithExpire(redisDb *db, robj *key);
 void flushSlaveKeysWithExpireList(void);

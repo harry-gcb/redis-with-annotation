@@ -1404,7 +1404,8 @@ dictType zsetDictType = {
     NULL                       /* allow to expand */
 };
 
-/* Db->dict, keys are sds strings, vals are Redis objects. */
+/* 数据库字典的类型，键为SDS，值为Redis对象
+ */
 dictType dbDictType = {
     dictSdsHash,                /* hash function */
     NULL,                       /* key dup */
@@ -1417,13 +1418,13 @@ dictType dbDictType = {
 
 /* server.lua_scripts sha (as sds string) -> scripts (as robj) cache. */
 dictType shaScriptObjectDictType = {
-    dictSdsCaseHash,            /* hash function */
-    NULL,                       /* key dup */
-    NULL,                       /* val dup */
-    dictSdsKeyCaseCompare,      /* key compare */
-    dictSdsDestructor,          /* key destructor */
-    dictObjectDestructor,       /* val destructor */
-    NULL                        /* allow to expand */
+    dictSdsCaseHash,       /* 键的散列函数 */
+    NULL,                  /* key dup */
+    NULL,                  /* val dup */
+    dictSdsKeyCaseCompare, /* 键的比较函数 */
+    dictSdsDestructor,     /* 键的析构函数 */
+    dictObjectDestructor,  /* 值的析构函数 */
+    NULL                   /* allow to expand */
 };
 
 /* Db->expires */
@@ -1850,11 +1851,16 @@ void clientsCron(void) {
 /* This function handles 'background' operations we are required to do
  * incrementally in Redis databases, such as active key expiring, resizing,
  * rehashing. */
+/* 对数据库执行删除过期键，调整大小，以及主动和渐进式 rehash */
 void databasesCron(void) {
+    /* 函数先从数据库中删除过期键，然后再对数据库的大小进行修改 */
     /* Expire keys by random sampling. Not required for slaves
-     * as master will synthesize DELs for us. */
+     * as master will synthesize DELs for us.
+     * 通过随机抽样使密钥过期。slave不需要，因为 master 会为我们合成 DEL。
+     */
     if (server.active_expire_enabled) {
         if (iAmMaster()) {
+            /* 清除模式为 CYCLE_SLOW ，这个模式会尽量多清除过期键 */
             activeExpireCycle(ACTIVE_EXPIRE_CYCLE_SLOW);
         } else {
             expireSlaveKeys();
@@ -2019,24 +2025,37 @@ void cronUpdateMemoryStats() {
 }
 
 /* This is our timer interrupt, called server.hz times per second.
+ * 这是 Redis 的时间中断器，每秒调用 server.hz 次。
  * Here is where we do a number of things that need to be done asynchronously.
  * For instance:
- *
+ * 以下是需要异步执行的操作：
  * - Active expired keys collection (it is also performed in a lazy way on
  *   lookup).
+ *   主动清除过期键。
  * - Software watchdog.
+ *   更新软件 watchdog 的信息。
  * - Update some statistic.
+ *   更新统计信息。
  * - Incremental rehashing of the DBs hash tables.
+ *   对数据库进行渐增式 Rehash
  * - Triggering BGSAVE / AOF rewrite, and handling of terminated children.
+ *   触发 BGSAVE 或者 AOF 重写，并处理之后由 BGSAVE 和 AOF
+ * 重写引发的子进程停止。
  * - Clients timeout of different kinds.
+ *   处理客户端超时。
  * - Replication reconnection.
+ *   复制重连
  * - Many more...
+ *   等等。。。
  *
  * Everything directly called here will be called server.hz times per second,
  * so in order to throttle execution of things we want to do less frequently
  * a macro is used: run_with_period(milliseconds) { .... }
+ *
+ * 因为 serverCron 函数中的所有代码都会每秒调用 server.hz 次，
+ * 为了对部分代码的调用次数进行限制，使用了一个宏 run_with_period(milliseconds)
+ * { ... } ，个宏可以将被包含代码的执行次数降低为每 milliseconds 执行一次。
  */
-
 int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     int j;
     UNUSED(eventLoop);
@@ -2052,7 +2071,10 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     server.hz = server.config_hz;
     /* Adapt the server.hz value to the number of configured clients. If we have
-     * many clients, we want to call serverCron() with an higher frequency. */
+     * many clients, we want to call serverCron() with an higher frequency.
+     * 使 server.hz 值适应已配置客户端的数量，
+     * 如果我们有很多客户端，我们希望以更高的频率调用serverCron()。
+     */
     if (server.dynamic_hz) {
         while (listLength(server.clients) / server.hz >
                MAX_CLIENTS_PER_CLOCK_TICK)
@@ -2064,7 +2086,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
             }
         }
     }
-
+    /* 100毫秒周期执行 */
     run_with_period(100) {
         long long stat_net_input_bytes, stat_net_output_bytes;
         atomicGet(server.stat_net_input_bytes, stat_net_input_bytes);
@@ -2095,22 +2117,30 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     /* We received a SIGTERM, shutting down here in a safe way, as it is
      * not ok doing so inside the signal handler. */
+    /* 服务器进程收到 SIGTERM 信号，关闭服务器 */
     if (server.shutdown_asap) {
+        /* 尝试关闭服务器 */
         if (prepareForShutdown(SHUTDOWN_NOFLAGS) == C_OK) exit(0);
+        /* 如果关闭失败，那么打印 LOG ，并移除关闭标识 */
         serverLog(LL_WARNING,"SIGTERM received but errors trying to shut down the server, check the logs for more information");
         server.shutdown_asap = 0;
     }
 
     /* Show some info about non-empty databases */
     if (server.verbosity <= LL_VERBOSE) {
+        /* 5000毫秒周期执行 */
         run_with_period(5000) {
+            /* 打印数据库的键值对信息 */
             for (j = 0; j < server.dbnum; j++) {
                 long long size, used, vkeys;
-
+                /* 可用键值对的数量 */
                 size = dictSlots(server.db[j].dict);
+                /* 已用键值对的数量 */
                 used = dictSize(server.db[j].dict);
+                /* 带有过期时间的键值对数量 */
                 vkeys = dictSize(server.db[j].expires);
                 if (used || vkeys) {
+                    /* 用 LOG 打印数量 */
                     serverLog(LL_VERBOSE,"DB %d: %lld keys (%lld volatile) in %lld slots HT.",j,used,vkeys,size);
                 }
             }
@@ -2118,6 +2148,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* Show information about connected clients */
+    /* 如果服务器没有运行在 SENTINEL 模式下，那么打印客户端的连接信息 */
     if (!server.sentinel_mode) {
         run_with_period(5000) {
             serverLog(LL_DEBUG,
@@ -2129,9 +2160,11 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* We need to do a few operations on clients asynchronously. */
+    /* 检查客户端，关闭超时客户端，并释放客户端多余的缓冲区 */
     clientsCron();
 
     /* Handle background operations on Redis databases. */
+    /* 对数据库执行各种操作 */
     databasesCron();
 
     /* Start a scheduled AOF rewrite if this was requested by the user while
@@ -2265,7 +2298,10 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     moduleFireServerEvent(REDISMODULE_EVENT_CRON_LOOP,
                           0,
                           &ei);
-
+    /* 假设server.hz取默认值10，函数返回1000/server.hz，
+     * 会更新当前时间事件的触发时间为100毫秒，
+     * 即serverCron的执行周期为100毫秒
+     */
     server.cronloops++;
     return 1000/server.hz;
 }
@@ -2473,11 +2509,13 @@ void afterSleep(struct aeEventLoop *eventLoop) {
 }
 
 /* =========================== Server initialization ======================== */
-
+/* 创建一些共享对象，这些对象永远不会被删除（例如：执行命令时Redis会返回一些字符串回复
+ */
 void createSharedObjects(void) {
     int j;
 
     /* Shared command responses */
+    /* 创建命令回复字符串对象 */
     shared.crlf = createObject(OBJ_STRING,sdsnew("\r\n"));
     shared.ok = createObject(OBJ_STRING,sdsnew("+OK\r\n"));
     shared.emptybulk = createObject(OBJ_STRING,sdsnew("$0\r\n\r\n"));
@@ -2610,6 +2648,7 @@ void createSharedObjects(void) {
     shared.special_equals = createStringObject("=",1);
     shared.redacted = makeObjectShared(createStringObject("(redacted)",10));
 
+    /* 创建0到10000整数对象 */
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
         shared.integers[j] =
             makeObjectShared(createObject(OBJ_STRING,(void*)(long)j));
@@ -2629,22 +2668,26 @@ void createSharedObjects(void) {
     shared.maxstring = sdsnew("maxstring");
 }
 
+/* 初始化服务器配置 */
 void initServerConfig(void) {
     int j;
 
-    updateCachedTime(1);
-    getRandomHexChars(server.runid,CONFIG_RUN_ID_SIZE);
+    updateCachedTime(1); /* 更新缓存时间 */
+    /* 设置服务器的运行 ID */
+    getRandomHexChars(server.runid, CONFIG_RUN_ID_SIZE);
     server.runid[CONFIG_RUN_ID_SIZE] = '\0';
-    changeReplicationId();
-    clearReplicationId2();
-    server.hz = CONFIG_DEFAULT_HZ; /* Initialize it ASAP, even if it may get
-                                      updated later after loading the config.
-                                      This value may be used before the server
-                                      is initialized. */
+    changeReplicationId(); /* 初始化 replication id，主要是用来为后续
+                              master-slave 模式分配唯一 id */
+    clearReplicationId2(); /* 清除辅助 replication id，这种情况有可能发生在
+                              在完全重新同步之后开始新的复制历史记录时 */
+    server.hz = CONFIG_DEFAULT_HZ; /* 设置默认服务器频率，需要尽早更新，
+                                    * 尽管后面加载配置文件时可能更新这个值，
+                                    * 但是初始化过程中可能会用到这个值
+                                    */
     server.timezone = getTimeZone(); /* Initialized by tzset(). */
     server.configfile = NULL;
     server.executable = NULL;
-    server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
+    server.arch_bits = (sizeof(long) == 8) ? 64 : 32; /* 设置服务器的运行架构 */
     server.bindaddr_count = 0;
     server.unixsocketperm = CONFIG_DEFAULT_UNIX_SOCKET_PERM;
     server.ipfd.count = 0;
@@ -3138,20 +3181,21 @@ void makeThreadKillable(void) {
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 }
 
+/* 创建并初始化服务器数据结构 */
 void initServer(void) {
     int j;
-
+    /* 设置信号处理函数 */
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
     setupSignalHandlers();
     makeThreadKillable();
-
+    /* 设置 syslog */
     if (server.syslog_enabled) {
         openlog(server.syslog_ident, LOG_PID | LOG_NDELAY | LOG_NOWAIT,
             server.syslog_facility);
     }
 
-    /* Initialization after setting defaults from the config system. */
+    /* 从配置系统设置默认值后，初始化并创建数据结构。 */
     server.aof_state = server.aof_enabled ? AOF_ON : AOF_OFF;
     server.hz = server.config_hz;
     server.pid = getpid();
@@ -3160,7 +3204,7 @@ void initServer(void) {
     server.current_client = NULL;
     server.errors = raxNew();
     server.fixed_time_expire = 0;
-    server.clients = listCreate();
+    server.clients = listCreate(); /* 初始化客户端列表 */
     server.clients_index = raxNew();
     server.clients_to_close = listCreate();
     server.slaves = listCreate();
@@ -3186,11 +3230,12 @@ void initServer(void) {
         serverLog(LL_WARNING, "Failed to configure TLS. Check logs for more info.");
         exit(1);
     }
-
+    /* 创建共享对象 */
     createSharedObjects();
     adjustOpenFilesLimit();
     const char *clk_msg = monotonicInit();
     serverLog(LL_NOTICE, "monotonic clock: %s", clk_msg);
+    /* 创建事件循环eventLoop，输入参数setsize为用户配置最大客户端数目 + 128 */
     server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
     if (server.el == NULL) {
         serverLog(LL_WARNING,
@@ -3198,11 +3243,12 @@ void initServer(void) {
             strerror(errno));
         exit(1);
     }
+    /* 创建数据库数组 */
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 
-    /* Open the TCP listening socket for the user commands. */
+    /* 为用户命令打开 TCP 侦听套接字。 */
     if (server.port != 0 &&
-        listenToPort(server.port,&server.ipfd) == C_ERR) {
+        listenToPort(server.port, &server.ipfd) == C_ERR) {
         serverLog(LL_WARNING, "Failed listening on port %u (TCP), aborting.", server.port);
         exit(1);
     }
@@ -3231,7 +3277,7 @@ void initServer(void) {
         exit(1);
     }
 
-    /* Create the Redis databases, and initialize other internal state. */
+    /* 创建 Redis 数据库，并初始化其他内部状态 */
     for (j = 0; j < server.dbnum; j++) {
         server.db[j].dict = dictCreate(&dbDictType,NULL);
         server.db[j].expires = dictCreate(&dbExpiresDictType,NULL);
@@ -3297,7 +3343,10 @@ void initServer(void) {
 
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
-     * expired keys and so forth. */
+     * expired keys and so forth.
+     *
+     * 创建定时器，该定时器将在一毫秒后触发
+     * */
     if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         serverPanic("Can't create event loop timers.");
         exit(1);
@@ -3450,6 +3499,7 @@ void populateCommandTable(void) {
     int numcommands = sizeof(redisCommandTable)/sizeof(struct redisCommand);
     /* 遍历命令列表，将每个命令放进字典中 */
     for (j = 0; j < numcommands; j++) {
+        /* 指定命令 */
         struct redisCommand *c = redisCommandTable+j;
         int retval1, retval2;
 
@@ -3457,6 +3507,7 @@ void populateCommandTable(void) {
         if (populateCommandTableParseFlags(c,c->sflags) == C_ERR)
             serverPanic("Unsupported command flag");
         /* Access Control List */
+        /* 为该命令添加权限控制 */
         c->id = ACLGetCommandID(c->name); /* Assign the ID used for ACL. */
         /* 将命令名称添加到字典 */
         retval1 = dictAdd(server.commands, sdsnew(c->name), c);
@@ -6332,7 +6383,7 @@ int main(int argc, char **argv) {
     }
 
     readOOMScoreAdj();
-    initServer();
+    initServer(); /* 创建并初始化服务器数据结构 */
     if (background || server.pidfile) createPidFile();
     if (server.set_proc_title) redisSetProcTitle(NULL);
     redisAsciiArt();
