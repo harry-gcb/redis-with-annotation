@@ -74,6 +74,26 @@ ConnectionType CT_Socket;
  * be embedded in different structs, not just client.
  */
 
+/* 创建连接时，我们必须已经知道它的类型，但底层套接字可能存在也可能不存在：
+ *
+ * - 对于接受的连接，它存在是因为我们没有对监听/接受部分进行建模；
+ *   所以调用者调用connCreateSocket()，然后调用 connAccept()。
+ * - 对于传出连接，套接字由连接模块自己创建； 因此，调用者调用
+ *   connCreateSocket()，然后调用connConnect()，
+ *   它注册了一个连接回调，该回调在连接/错误状态（以及在完成任何传输级别握手之后）触发。
+ *
+ * 注意：早期版本依赖于作为其他结构一部分的连接，而不是独立分配的。
+ * 这可能会导致进一步的优化，例如使用 container_of() 等。
+ * 但是由于以下原因，它已停止使用这种方法：
+ *
+ * 1. 在某些情况下，conns 是在包含结构的上下文之外创建/处理的，
+ *    在这种情况下，复制它们会有点尴尬。
+ * 2. 未来的实现可能希望为连接分配任意数据。
+ * 3. container_of() 方法无论如何都是有风险的，
+ *    因为连接可能嵌入到不同的结构中，而不仅仅是客户端
+ */
+
+/* 创建一个socket连接 */
 connection *connCreateSocket() {
     connection *conn = zcalloc(sizeof(connection));
     conn->type = &CT_Socket;
@@ -91,6 +111,11 @@ connection *connCreateSocket() {
  * Callers should use connGetState() and verify the created connection
  * is not in an error state (which is not possible for a socket connection,
  * but could but possible with other protocols).
+ */
+/* 创建一个已与接受的连接关联的新套接字类型连接。
+ * 在调用 connAccept() 并调用连接级接受处理程序之前，套接字尚未准备好进行 I/O。
+ * 调用者应该使用 connGetState() 并验证创建的连接没有处于错误状态
+ * （这对于套接字连接是不可能的，但对于其他协议却可以）。
  */
 connection *connCreateAcceptedSocket(int fd) {
     connection *conn = connCreateSocket();
@@ -232,18 +257,20 @@ static int connSocketSetWriteHandler(connection *conn, ConnectionCallbackFunc fu
     return C_OK;
 }
 
-/* Register a read handler, to be called when the connection is readable.
- * If NULL, the existing handler is removed.
- */
+/* 注册一个读取处理程序，在连接可读时调用。 如果为
+ * NULL，则移除现有的处理程序。*/
 static int connSocketSetReadHandler(connection *conn, ConnectionCallbackFunc func) {
+    /* 函数指针判等，相等时不用再次注册 */
     if (func == conn->read_handler) return C_OK;
-
+    /* 这次读取处理程序，为空时移除现有事件 */
     conn->read_handler = func;
-    if (!conn->read_handler)
-        aeDeleteFileEvent(server.el,conn->fd,AE_READABLE);
-    else
-        if (aeCreateFileEvent(server.el,conn->fd,
-                    AE_READABLE,conn->type->ae_handler,conn) == AE_ERR) return C_ERR;
+    if (!conn->read_handler) {
+        aeDeleteFileEvent(server.el, conn->fd, AE_READABLE);
+    } else if (aeCreateFileEvent(server.el, conn->fd, AE_READABLE,
+                                 conn->type->ae_handler, conn) == AE_ERR) {
+        /* 绑定读事件到事件 loop （开始接收命令请求） */
+        return C_ERR;
+    }
     return C_OK;
 }
 
@@ -417,6 +444,7 @@ int connRecvTimeout(connection *conn, long long ms) {
     return anetRecvTimeout(NULL, conn->fd, ms);
 }
 
+/* 获取连接状态 */
 int connGetState(connection *conn) {
     return conn->state;
 }

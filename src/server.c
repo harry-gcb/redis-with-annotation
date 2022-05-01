@@ -193,923 +193,685 @@ struct redisServer server; /* Server global state */
  */
 
 struct redisCommand redisCommandTable[] = {
-    {"module",moduleCommand,-2,
-     "admin no-script",
-     0,NULL,0,0,0,0,0,0},
+    {"module", moduleCommand, -2, "admin no-script", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"get",getCommand,2,
-     "read-only fast @string",
-     0,NULL,1,1,1,0,0,0},
+    {"get", getCommand, 2, "read-only fast @string", 0, NULL, 1, 1, 1, 0, 0, 0},
 
-    {"getex",getexCommand,-2,
-     "write fast @string",
-     0,NULL,1,1,1,0,0,0},
+    {"getex", getexCommand, -2, "write fast @string", 0, NULL, 1, 1, 1, 0, 0,
+     0},
 
-    {"getdel",getdelCommand,2,
-     "write fast @string",
-     0,NULL,1,1,1,0,0,0},
+    {"getdel", getdelCommand, 2, "write fast @string", 0, NULL, 1, 1, 1, 0, 0,
+     0},
 
     /* Note that we can't flag set as fast, since it may perform an
      * implicit DEL of a large key. */
-    {"set",setCommand,-3,
-     "write use-memory @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"setnx",setnxCommand,3,
-     "write use-memory fast @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"setex",setexCommand,4,
-     "write use-memory @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"psetex",psetexCommand,4,
-     "write use-memory @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"append",appendCommand,3,
-     "write use-memory fast @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"strlen",strlenCommand,2,
-     "read-only fast @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"del",delCommand,-2,
-     "write @keyspace",
-     0,NULL,1,-1,1,0,0,0},
-
-    {"unlink",unlinkCommand,-2,
-     "write fast @keyspace",
-     0,NULL,1,-1,1,0,0,0},
-
-    {"exists",existsCommand,-2,
-     "read-only fast @keyspace",
-     0,NULL,1,-1,1,0,0,0},
-
-    {"setbit",setbitCommand,4,
-     "write use-memory @bitmap",
-     0,NULL,1,1,1,0,0,0},
-
-    {"getbit",getbitCommand,3,
-     "read-only fast @bitmap",
-     0,NULL,1,1,1,0,0,0},
-
-    {"bitfield",bitfieldCommand,-2,
-     "write use-memory @bitmap",
-     0,NULL,1,1,1,0,0,0},
-
-    {"bitfield_ro",bitfieldroCommand,-2,
-     "read-only fast @bitmap",
-     0,NULL,1,1,1,0,0,0},
-
-    {"setrange",setrangeCommand,4,
-     "write use-memory @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"getrange",getrangeCommand,4,
-     "read-only @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"substr",getrangeCommand,4,
-     "read-only @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"incr",incrCommand,2,
-     "write use-memory fast @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"decr",decrCommand,2,
-     "write use-memory fast @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"mget",mgetCommand,-2,
-     "read-only fast @string",
-     0,NULL,1,-1,1,0,0,0},
-
-    {"rpush",rpushCommand,-3,
-     "write use-memory fast @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"lpush",lpushCommand,-3,
-     "write use-memory fast @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"rpushx",rpushxCommand,-3,
-     "write use-memory fast @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"lpushx",lpushxCommand,-3,
-     "write use-memory fast @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"linsert",linsertCommand,5,
-     "write use-memory @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"rpop",rpopCommand,-2,
-     "write fast @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"lpop",lpopCommand,-2,
-     "write fast @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"brpop",brpopCommand,-3,
-     "write no-script @list @blocking",
-     0,NULL,1,-2,1,0,0,0},
-
-    {"brpoplpush",brpoplpushCommand,4,
-     "write use-memory no-script @list @blocking",
-     0,NULL,1,2,1,0,0,0},
-
-    {"blmove",blmoveCommand,6,
-     "write use-memory no-script @list @blocking",
-     0,NULL,1,2,1,0,0,0},
-
-    {"blpop",blpopCommand,-3,
-     "write no-script @list @blocking",
-     0,NULL,1,-2,1,0,0,0},
-
-    {"llen",llenCommand,2,
-     "read-only fast @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"lindex",lindexCommand,3,
-     "read-only @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"lset",lsetCommand,4,
-     "write use-memory @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"lrange",lrangeCommand,4,
-     "read-only @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"ltrim",ltrimCommand,4,
-     "write @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"lpos",lposCommand,-3,
-     "read-only @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"lrem",lremCommand,4,
-     "write @list",
-     0,NULL,1,1,1,0,0,0},
-
-    {"rpoplpush",rpoplpushCommand,3,
-     "write use-memory @list",
-     0,NULL,1,2,1,0,0,0},
-
-    {"lmove",lmoveCommand,5,
-     "write use-memory @list",
-     0,NULL,1,2,1,0,0,0},
-
-    {"sadd",saddCommand,-3,
-     "write use-memory fast @set",
-     0,NULL,1,1,1,0,0,0},
-
-    {"srem",sremCommand,-3,
-     "write fast @set",
-     0,NULL,1,1,1,0,0,0},
-
-    {"smove",smoveCommand,4,
-     "write fast @set",
-     0,NULL,1,2,1,0,0,0},
-
-    {"sismember",sismemberCommand,3,
-     "read-only fast @set",
-     0,NULL,1,1,1,0,0,0},
-
-    {"smismember",smismemberCommand,-3,
-     "read-only fast @set",
-     0,NULL,1,1,1,0,0,0},
-
-    {"scard",scardCommand,2,
-     "read-only fast @set",
-     0,NULL,1,1,1,0,0,0},
-
-    {"spop",spopCommand,-2,
-     "write random fast @set",
-     0,NULL,1,1,1,0,0,0},
-
-    {"srandmember",srandmemberCommand,-2,
-     "read-only random @set",
-     0,NULL,1,1,1,0,0,0},
-
-    {"sinter",sinterCommand,-2,
-     "read-only to-sort @set",
-     0,NULL,1,-1,1,0,0,0},
-
-    {"sinterstore",sinterstoreCommand,-3,
-     "write use-memory @set",
-     0,NULL,1,-1,1,0,0,0},
-
-    {"sunion",sunionCommand,-2,
-     "read-only to-sort @set",
-     0,NULL,1,-1,1,0,0,0},
-
-    {"sunionstore",sunionstoreCommand,-3,
-     "write use-memory @set",
-     0,NULL,1,-1,1,0,0,0},
-
-    {"sdiff",sdiffCommand,-2,
-     "read-only to-sort @set",
-     0,NULL,1,-1,1,0,0,0},
-
-    {"sdiffstore",sdiffstoreCommand,-3,
-     "write use-memory @set",
-     0,NULL,1,-1,1,0,0,0},
-
-    {"smembers",sinterCommand,2,
-     "read-only to-sort @set",
-     0,NULL,1,1,1,0,0,0},
-
-    {"sscan",sscanCommand,-3,
-     "read-only random @set",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zadd",zaddCommand,-4,
-     "write use-memory fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zincrby",zincrbyCommand,4,
-     "write use-memory fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zrem",zremCommand,-3,
-     "write fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zremrangebyscore",zremrangebyscoreCommand,4,
-     "write @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zremrangebyrank",zremrangebyrankCommand,4,
-     "write @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zremrangebylex",zremrangebylexCommand,4,
-     "write @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zunionstore",zunionstoreCommand,-4,
-     "write use-memory @sortedset",
-     0,zunionInterDiffStoreGetKeys,1,1,1,0,0,0},
-
-    {"zinterstore",zinterstoreCommand,-4,
-     "write use-memory @sortedset",
-     0,zunionInterDiffStoreGetKeys,1,1,1,0,0,0},
-
-    {"zdiffstore",zdiffstoreCommand,-4,
-     "write use-memory @sortedset",
-     0,zunionInterDiffStoreGetKeys,1,1,1,0,0,0},
-
-    {"zunion",zunionCommand,-3,
-     "read-only @sortedset",
-     0,zunionInterDiffGetKeys,0,0,0,0,0,0},
-
-    {"zinter",zinterCommand,-3,
-     "read-only @sortedset",
-     0,zunionInterDiffGetKeys,0,0,0,0,0,0},
-
-    {"zdiff",zdiffCommand,-3,
-     "read-only @sortedset",
-     0,zunionInterDiffGetKeys,0,0,0,0,0,0},
-
-    {"zrange",zrangeCommand,-4,
-     "read-only @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zrangestore",zrangestoreCommand,-5,
-     "write use-memory @sortedset",
-     0,NULL,1,2,1,0,0,0},
-
-    {"zrangebyscore",zrangebyscoreCommand,-4,
-     "read-only @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zrevrangebyscore",zrevrangebyscoreCommand,-4,
-     "read-only @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zrangebylex",zrangebylexCommand,-4,
-     "read-only @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zrevrangebylex",zrevrangebylexCommand,-4,
-     "read-only @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zcount",zcountCommand,4,
-     "read-only fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zlexcount",zlexcountCommand,4,
-     "read-only fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zrevrange",zrevrangeCommand,-4,
-     "read-only @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zcard",zcardCommand,2,
-     "read-only fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zscore",zscoreCommand,3,
-     "read-only fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zmscore",zmscoreCommand,-3,
-     "read-only fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zrank",zrankCommand,3,
-     "read-only fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zrevrank",zrevrankCommand,3,
-     "read-only fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zscan",zscanCommand,-3,
-     "read-only random @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zpopmin",zpopminCommand,-2,
-     "write fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"zpopmax",zpopmaxCommand,-2,
-     "write fast @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"bzpopmin",bzpopminCommand,-3,
-     "write no-script fast @sortedset @blocking",
-     0,NULL,1,-2,1,0,0,0},
-
-    {"bzpopmax",bzpopmaxCommand,-3,
-     "write no-script fast @sortedset @blocking",
-     0,NULL,1,-2,1,0,0,0},
-
-    {"zrandmember",zrandmemberCommand,-2,
-     "read-only random @sortedset",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hset",hsetCommand,-4,
-     "write use-memory fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hsetnx",hsetnxCommand,4,
-     "write use-memory fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hget",hgetCommand,3,
-     "read-only fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hmset",hsetCommand,-4,
-     "write use-memory fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hmget",hmgetCommand,-3,
-     "read-only fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hincrby",hincrbyCommand,4,
-     "write use-memory fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hincrbyfloat",hincrbyfloatCommand,4,
-     "write use-memory fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hdel",hdelCommand,-3,
-     "write fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hlen",hlenCommand,2,
-     "read-only fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hstrlen",hstrlenCommand,3,
-     "read-only fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hkeys",hkeysCommand,2,
-     "read-only to-sort @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hvals",hvalsCommand,2,
-     "read-only to-sort @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hgetall",hgetallCommand,2,
-     "read-only random @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hexists",hexistsCommand,3,
-     "read-only fast @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hrandfield",hrandfieldCommand,-2,
-     "read-only random @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"hscan",hscanCommand,-3,
-     "read-only random @hash",
-     0,NULL,1,1,1,0,0,0},
-
-    {"incrby",incrbyCommand,3,
-     "write use-memory fast @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"decrby",decrbyCommand,3,
-     "write use-memory fast @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"incrbyfloat",incrbyfloatCommand,3,
-     "write use-memory fast @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"getset",getsetCommand,3,
-     "write use-memory fast @string",
-     0,NULL,1,1,1,0,0,0},
-
-    {"mset",msetCommand,-3,
-     "write use-memory @string",
-     0,NULL,1,-1,2,0,0,0},
-
-    {"msetnx",msetnxCommand,-3,
-     "write use-memory @string",
-     0,NULL,1,-1,2,0,0,0},
-
-    {"randomkey",randomkeyCommand,1,
-     "read-only random @keyspace",
-     0,NULL,0,0,0,0,0,0},
-
-    {"select",selectCommand,2,
-     "ok-loading fast ok-stale @keyspace",
-     0,NULL,0,0,0,0,0,0},
-
-    {"swapdb",swapdbCommand,3,
-     "write fast @keyspace @dangerous",
-     0,NULL,0,0,0,0,0,0},
-
-    {"move",moveCommand,3,
-     "write fast @keyspace",
-     0,NULL,1,1,1,0,0,0},
-
-    {"copy",copyCommand,-3,
-     "write use-memory @keyspace",
-     0,NULL,1,2,1,0,0,0},
+    {"set", setCommand, -3, "write use-memory @string", 0, NULL, 1, 1, 1, 0, 0,
+     0},
+
+    {"setnx", setnxCommand, 3, "write use-memory fast @string", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"setex", setexCommand, 4, "write use-memory @string", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"psetex", psetexCommand, 4, "write use-memory @string", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"append", appendCommand, 3, "write use-memory fast @string", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"strlen", strlenCommand, 2, "read-only fast @string", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+    /* 同步删除一个或多个key，因为是同步删除，所以在删除大key时可能会阻塞服务器
+     */
+    {"del", delCommand, -2, "write @keyspace", 0, NULL, 1, -1, 1, 0, 0, 0},
+    /* 异步方式删除key，这可以避免del删除大key的问题，unlink在删除时会判断删除所需的工作量，以此决定使用同步还是异步删除 */
+    {"unlink", unlinkCommand, -2, "write fast @keyspace", 0, NULL, 1, -1, 1, 0,
+     0, 0},
+    /* 判断指定的key是否存在，并返回key存在的数量，使用频率高 */
+    {"exists", existsCommand, -2, "read-only fast @keyspace", 0, NULL, 1, -1, 1,
+     0, 0, 0},
+
+    {"setbit", setbitCommand, 4, "write use-memory @bitmap", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"getbit", getbitCommand, 3, "read-only fast @bitmap", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"bitfield", bitfieldCommand, -2, "write use-memory @bitmap", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"bitfield_ro", bitfieldroCommand, -2, "read-only fast @bitmap", 0, NULL, 1,
+     1, 1, 0, 0, 0},
+
+    {"setrange", setrangeCommand, 4, "write use-memory @string", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"getrange", getrangeCommand, 4, "read-only @string", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"substr", getrangeCommand, 4, "read-only @string", 0, NULL, 1, 1, 1, 0, 0,
+     0},
+
+    {"incr", incrCommand, 2, "write use-memory fast @string", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"decr", decrCommand, 2, "write use-memory fast @string", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"mget", mgetCommand, -2, "read-only fast @string", 0, NULL, 1, -1, 1, 0, 0,
+     0},
+
+    {"rpush", rpushCommand, -3, "write use-memory fast @list", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"lpush", lpushCommand, -3, "write use-memory fast @list", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"rpushx", rpushxCommand, -3, "write use-memory fast @list", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"lpushx", lpushxCommand, -3, "write use-memory fast @list", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"linsert", linsertCommand, 5, "write use-memory @list", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"rpop", rpopCommand, -2, "write fast @list", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"lpop", lpopCommand, -2, "write fast @list", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"brpop", brpopCommand, -3, "write no-script @list @blocking", 0, NULL, 1,
+     -2, 1, 0, 0, 0},
+
+    {"brpoplpush", brpoplpushCommand, 4,
+     "write use-memory no-script @list @blocking", 0, NULL, 1, 2, 1, 0, 0, 0},
+
+    {"blmove", blmoveCommand, 6, "write use-memory no-script @list @blocking",
+     0, NULL, 1, 2, 1, 0, 0, 0},
+
+    {"blpop", blpopCommand, -3, "write no-script @list @blocking", 0, NULL, 1,
+     -2, 1, 0, 0, 0},
+
+    {"llen", llenCommand, 2, "read-only fast @list", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"lindex", lindexCommand, 3, "read-only @list", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"lset", lsetCommand, 4, "write use-memory @list", 0, NULL, 1, 1, 1, 0, 0,
+     0},
+
+    {"lrange", lrangeCommand, 4, "read-only @list", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"ltrim", ltrimCommand, 4, "write @list", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"lpos", lposCommand, -3, "read-only @list", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"lrem", lremCommand, 4, "write @list", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"rpoplpush", rpoplpushCommand, 3, "write use-memory @list", 0, NULL, 1, 2,
+     1, 0, 0, 0},
+
+    {"lmove", lmoveCommand, 5, "write use-memory @list", 0, NULL, 1, 2, 1, 0, 0,
+     0},
+
+    {"sadd", saddCommand, -3, "write use-memory fast @set", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"srem", sremCommand, -3, "write fast @set", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"smove", smoveCommand, 4, "write fast @set", 0, NULL, 1, 2, 1, 0, 0, 0},
+
+    {"sismember", sismemberCommand, 3, "read-only fast @set", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"smismember", smismemberCommand, -3, "read-only fast @set", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"scard", scardCommand, 2, "read-only fast @set", 0, NULL, 1, 1, 1, 0, 0,
+     0},
+
+    {"spop", spopCommand, -2, "write random fast @set", 0, NULL, 1, 1, 1, 0, 0,
+     0},
+
+    {"srandmember", srandmemberCommand, -2, "read-only random @set", 0, NULL, 1,
+     1, 1, 0, 0, 0},
+
+    {"sinter", sinterCommand, -2, "read-only to-sort @set", 0, NULL, 1, -1, 1,
+     0, 0, 0},
+
+    {"sinterstore", sinterstoreCommand, -3, "write use-memory @set", 0, NULL, 1,
+     -1, 1, 0, 0, 0},
+
+    {"sunion", sunionCommand, -2, "read-only to-sort @set", 0, NULL, 1, -1, 1,
+     0, 0, 0},
+
+    {"sunionstore", sunionstoreCommand, -3, "write use-memory @set", 0, NULL, 1,
+     -1, 1, 0, 0, 0},
+
+    {"sdiff", sdiffCommand, -2, "read-only to-sort @set", 0, NULL, 1, -1, 1, 0,
+     0, 0},
+
+    {"sdiffstore", sdiffstoreCommand, -3, "write use-memory @set", 0, NULL, 1,
+     -1, 1, 0, 0, 0},
+
+    {"smembers", sinterCommand, 2, "read-only to-sort @set", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"sscan", sscanCommand, -3, "read-only random @set", 0, NULL, 1, 1, 1, 0, 0,
+     0},
+
+    {"zadd", zaddCommand, -4, "write use-memory fast @sortedset", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"zincrby", zincrbyCommand, 4, "write use-memory fast @sortedset", 0, NULL,
+     1, 1, 1, 0, 0, 0},
+
+    {"zrem", zremCommand, -3, "write fast @sortedset", 0, NULL, 1, 1, 1, 0, 0,
+     0},
+
+    {"zremrangebyscore", zremrangebyscoreCommand, 4, "write @sortedset", 0,
+     NULL, 1, 1, 1, 0, 0, 0},
+
+    {"zremrangebyrank", zremrangebyrankCommand, 4, "write @sortedset", 0, NULL,
+     1, 1, 1, 0, 0, 0},
+
+    {"zremrangebylex", zremrangebylexCommand, 4, "write @sortedset", 0, NULL, 1,
+     1, 1, 0, 0, 0},
+
+    {"zunionstore", zunionstoreCommand, -4, "write use-memory @sortedset", 0,
+     zunionInterDiffStoreGetKeys, 1, 1, 1, 0, 0, 0},
+
+    {"zinterstore", zinterstoreCommand, -4, "write use-memory @sortedset", 0,
+     zunionInterDiffStoreGetKeys, 1, 1, 1, 0, 0, 0},
+
+    {"zdiffstore", zdiffstoreCommand, -4, "write use-memory @sortedset", 0,
+     zunionInterDiffStoreGetKeys, 1, 1, 1, 0, 0, 0},
+
+    {"zunion", zunionCommand, -3, "read-only @sortedset", 0,
+     zunionInterDiffGetKeys, 0, 0, 0, 0, 0, 0},
+
+    {"zinter", zinterCommand, -3, "read-only @sortedset", 0,
+     zunionInterDiffGetKeys, 0, 0, 0, 0, 0, 0},
+
+    {"zdiff", zdiffCommand, -3, "read-only @sortedset", 0,
+     zunionInterDiffGetKeys, 0, 0, 0, 0, 0, 0},
+
+    {"zrange", zrangeCommand, -4, "read-only @sortedset", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"zrangestore", zrangestoreCommand, -5, "write use-memory @sortedset", 0,
+     NULL, 1, 2, 1, 0, 0, 0},
+
+    {"zrangebyscore", zrangebyscoreCommand, -4, "read-only @sortedset", 0, NULL,
+     1, 1, 1, 0, 0, 0},
+
+    {"zrevrangebyscore", zrevrangebyscoreCommand, -4, "read-only @sortedset", 0,
+     NULL, 1, 1, 1, 0, 0, 0},
+
+    {"zrangebylex", zrangebylexCommand, -4, "read-only @sortedset", 0, NULL, 1,
+     1, 1, 0, 0, 0},
+
+    {"zrevrangebylex", zrevrangebylexCommand, -4, "read-only @sortedset", 0,
+     NULL, 1, 1, 1, 0, 0, 0},
+
+    {"zcount", zcountCommand, 4, "read-only fast @sortedset", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"zlexcount", zlexcountCommand, 4, "read-only fast @sortedset", 0, NULL, 1,
+     1, 1, 0, 0, 0},
+
+    {"zrevrange", zrevrangeCommand, -4, "read-only @sortedset", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"zcard", zcardCommand, 2, "read-only fast @sortedset", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"zscore", zscoreCommand, 3, "read-only fast @sortedset", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"zmscore", zmscoreCommand, -3, "read-only fast @sortedset", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"zrank", zrankCommand, 3, "read-only fast @sortedset", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"zrevrank", zrevrankCommand, 3, "read-only fast @sortedset", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"zscan", zscanCommand, -3, "read-only random @sortedset", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"zpopmin", zpopminCommand, -2, "write fast @sortedset", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"zpopmax", zpopmaxCommand, -2, "write fast @sortedset", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"bzpopmin", bzpopminCommand, -3,
+     "write no-script fast @sortedset @blocking", 0, NULL, 1, -2, 1, 0, 0, 0},
+
+    {"bzpopmax", bzpopmaxCommand, -3,
+     "write no-script fast @sortedset @blocking", 0, NULL, 1, -2, 1, 0, 0, 0},
+
+    {"zrandmember", zrandmemberCommand, -2, "read-only random @sortedset", 0,
+     NULL, 1, 1, 1, 0, 0, 0},
+
+    {"hset", hsetCommand, -4, "write use-memory fast @hash", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"hsetnx", hsetnxCommand, 4, "write use-memory fast @hash", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"hget", hgetCommand, 3, "read-only fast @hash", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"hmset", hsetCommand, -4, "write use-memory fast @hash", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"hmget", hmgetCommand, -3, "read-only fast @hash", 0, NULL, 1, 1, 1, 0, 0,
+     0},
+
+    {"hincrby", hincrbyCommand, 4, "write use-memory fast @hash", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"hincrbyfloat", hincrbyfloatCommand, 4, "write use-memory fast @hash", 0,
+     NULL, 1, 1, 1, 0, 0, 0},
+
+    {"hdel", hdelCommand, -3, "write fast @hash", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"hlen", hlenCommand, 2, "read-only fast @hash", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"hstrlen", hstrlenCommand, 3, "read-only fast @hash", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"hkeys", hkeysCommand, 2, "read-only to-sort @hash", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"hvals", hvalsCommand, 2, "read-only to-sort @hash", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"hgetall", hgetallCommand, 2, "read-only random @hash", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+
+    {"hexists", hexistsCommand, 3, "read-only fast @hash", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"hrandfield", hrandfieldCommand, -2, "read-only random @hash", 0, NULL, 1,
+     1, 1, 0, 0, 0},
+
+    {"hscan", hscanCommand, -3, "read-only random @hash", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+
+    {"incrby", incrbyCommand, 3, "write use-memory fast @string", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"decrby", decrbyCommand, 3, "write use-memory fast @string", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"incrbyfloat", incrbyfloatCommand, 3, "write use-memory fast @string", 0,
+     NULL, 1, 1, 1, 0, 0, 0},
+
+    {"getset", getsetCommand, 3, "write use-memory fast @string", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+
+    {"mset", msetCommand, -3, "write use-memory @string", 0, NULL, 1, -1, 2, 0,
+     0, 0},
+
+    {"msetnx", msetnxCommand, -3, "write use-memory @string", 0, NULL, 1, -1, 2,
+     0, 0, 0},
+    /* 随机返回数据库中的key，使用频率较低 */
+    {"randomkey", randomkeyCommand, 1, "read-only random @keyspace", 0, NULL, 0,
+     0, 0, 0, 0, 0},
+
+    {"select", selectCommand, 2, "ok-loading fast ok-stale @keyspace", 0, NULL,
+     0, 0, 0, 0, 0, 0},
+
+    {"swapdb", swapdbCommand, 3, "write fast @keyspace @dangerous", 0, NULL, 0,
+     0, 0, 0, 0, 0},
+    /* 将指定key移动到另一个数据库，该命令使用较少 */
+    {"move", moveCommand, 3, "write fast @keyspace", 0, NULL, 1, 1, 1, 0, 0, 0},
+
+    {"copy", copyCommand, -3, "write use-memory @keyspace", 0, NULL, 1, 2, 1, 0,
+     0, 0},
 
     /* Like for SET, we can't mark rename as a fast command because
      * overwriting the target key may result in an implicit slow DEL. */
-    {"rename",renameCommand,3,
-     "write @keyspace",
-     0,NULL,1,2,1,0,0,0},
+    /* 重命名键 */
+    {"rename", renameCommand, 3, "write @keyspace", 0, NULL, 1, 2, 1, 0, 0, 0},
+    /* 重命名后的key不存在时才能执行成功 */
+    {"renamenx", renamenxCommand, 3, "write fast @keyspace", 0, NULL, 1, 2, 1,
+     0, 0, 0},
+    /* 设置key的过期时间 */
+    {"expire", expireCommand, 3, "write fast @keyspace", 0, NULL, 1, 1, 1, 0, 0,
+     0},
+    /* 设置key的过期时间 */
+    {"expireat", expireatCommand, 3, "write fast @keyspace", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+    /* 设置key的过期时间 */
+    {"pexpire", pexpireCommand, 3, "write fast @keyspace", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+    /* 设置key的过期时间 */
+    {"pexpireat", pexpireatCommand, 3, "write fast @keyspace", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+    /* 查找符合模式的键 */
+    {"keys", keysCommand, 2, "read-only to-sort @keyspace @dangerous", 0, NULL,
+     0, 0, 0, 0, 0, 0},
+    /* 遍历数据库中所有的键，不用担心阻塞数据库，使用频率较高 */
+    {"scan", scanCommand, -2, "read-only random @keyspace", 0, NULL, 0, 0, 0, 0,
+     0, 0},
 
-    {"renamenx",renamenxCommand,3,
-     "write fast @keyspace",
-     0,NULL,1,2,1,0,0,0},
+    {"dbsize", dbsizeCommand, 1, "read-only fast @keyspace", 0, NULL, 0, 0, 0,
+     0, 0, 0},
 
-    {"expire",expireCommand,3,
-     "write fast @keyspace",
-     0,NULL,1,1,1,0,0,0},
-
-    {"expireat",expireatCommand,3,
-     "write fast @keyspace",
-     0,NULL,1,1,1,0,0,0},
-
-    {"pexpire",pexpireCommand,3,
-     "write fast @keyspace",
-     0,NULL,1,1,1,0,0,0},
-
-    {"pexpireat",pexpireatCommand,3,
-     "write fast @keyspace",
-     0,NULL,1,1,1,0,0,0},
-
-    {"keys",keysCommand,2,
-     "read-only to-sort @keyspace @dangerous",
-     0,NULL,0,0,0,0,0,0},
-
-    {"scan",scanCommand,-2,
-     "read-only random @keyspace",
-     0,NULL,0,0,0,0,0,0},
-
-    {"dbsize",dbsizeCommand,1,
-     "read-only fast @keyspace",
-     0,NULL,0,0,0,0,0,0},
-
-    {"auth",authCommand,-2,
-     "no-auth no-script ok-loading ok-stale fast @connection",
-     0,NULL,0,0,0,0,0,0},
+    {"auth", authCommand, -2,
+     "no-auth no-script ok-loading ok-stale fast @connection", 0, NULL, 0, 0, 0,
+     0, 0, 0},
 
     /* We don't allow PING during loading since in Redis PING is used as
      * failure detection, and a loading server is considered to be
      * not available. */
-    {"ping",pingCommand,-1,
-     "ok-stale fast @connection",
-     0,NULL,0,0,0,0,0,0},
+    {"ping", pingCommand, -1, "ok-stale fast @connection", 0, NULL, 0, 0, 0, 0,
+     0, 0},
 
-    {"echo",echoCommand,2,
-     "fast @connection",
-     0,NULL,0,0,0,0,0,0},
+    {"echo", echoCommand, 2, "fast @connection", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"save",saveCommand,1,
-     "admin no-script",
-     0,NULL,0,0,0,0,0,0},
+    {"save", saveCommand, 1, "admin no-script", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"bgsave",bgsaveCommand,-1,
-     "admin no-script",
-     0,NULL,0,0,0,0,0,0},
+    {"bgsave", bgsaveCommand, -1, "admin no-script", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"bgrewriteaof",bgrewriteaofCommand,1,
-     "admin no-script",
-     0,NULL,0,0,0,0,0,0},
+    {"bgrewriteaof", bgrewriteaofCommand, 1, "admin no-script", 0, NULL, 0, 0,
+     0, 0, 0, 0},
 
-    {"shutdown",shutdownCommand,-1,
-     "admin no-script ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"shutdown", shutdownCommand, -1, "admin no-script ok-loading ok-stale", 0,
+     NULL, 0, 0, 0, 0, 0, 0},
 
-    {"lastsave",lastsaveCommand,1,
-     "random fast ok-loading ok-stale @admin @dangerous",
-     0,NULL,0,0,0,0,0,0},
+    {"lastsave", lastsaveCommand, 1,
+     "random fast ok-loading ok-stale @admin @dangerous", 0, NULL, 0, 0, 0, 0,
+     0, 0},
 
-    {"type",typeCommand,2,
-     "read-only fast @keyspace",
-     0,NULL,1,1,1,0,0,0},
+    {"type", typeCommand, 2, "read-only fast @keyspace", 0, NULL, 1, 1, 1, 0, 0,
+     0},
 
-    {"multi",multiCommand,1,
-     "no-script fast ok-loading ok-stale @transaction",
-     0,NULL,0,0,0,0,0,0},
+    {"multi", multiCommand, 1,
+     "no-script fast ok-loading ok-stale @transaction", 0, NULL, 0, 0, 0, 0, 0,
+     0},
 
-    {"exec",execCommand,1,
-     "no-script no-slowlog ok-loading ok-stale @transaction",
-     0,NULL,0,0,0,0,0,0},
+    {"exec", execCommand, 1,
+     "no-script no-slowlog ok-loading ok-stale @transaction", 0, NULL, 0, 0, 0,
+     0, 0, 0},
 
-    {"discard",discardCommand,1,
-     "no-script fast ok-loading ok-stale @transaction",
-     0,NULL,0,0,0,0,0,0},
+    {"discard", discardCommand, 1,
+     "no-script fast ok-loading ok-stale @transaction", 0, NULL, 0, 0, 0, 0, 0,
+     0},
 
-    {"sync",syncCommand,1,
-     "admin no-script",
-     0,NULL,0,0,0,0,0,0},
+    {"sync", syncCommand, 1, "admin no-script", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"psync",syncCommand,-3,
-     "admin no-script",
-     0,NULL,0,0,0,0,0,0},
+    {"psync", syncCommand, -3, "admin no-script", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"replconf",replconfCommand,-1,
-     "admin no-script ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"replconf", replconfCommand, -1, "admin no-script ok-loading ok-stale", 0,
+     NULL, 0, 0, 0, 0, 0, 0},
 
-    {"flushdb",flushdbCommand,-1,
-     "write @keyspace @dangerous",
-     0,NULL,0,0,0,0,0,0},
+    {"flushdb", flushdbCommand, -1, "write @keyspace @dangerous", 0, NULL, 0, 0,
+     0, 0, 0, 0},
 
-    {"flushall",flushallCommand,-1,
-     "write @keyspace @dangerous",
-     0,NULL,0,0,0,0,0,0},
+    {"flushall", flushallCommand, -1, "write @keyspace @dangerous", 0, NULL, 0,
+     0, 0, 0, 0, 0},
+    /* 对列表，集合或有序集合中的元素进行排序，使用方法相对复杂 */
+    {"sort", sortCommand, -2,
+     "write use-memory @list @set @sortedset @dangerous", 0, sortGetKeys, 1, 1,
+     1, 0, 0, 0},
 
-    {"sort",sortCommand,-2,
-     "write use-memory @list @set @sortedset @dangerous",
-     0,sortGetKeys,1,1,1,0,0,0},
+    {"info", infoCommand, -1, "ok-loading ok-stale random @dangerous", 0, NULL,
+     0, 0, 0, 0, 0, 0},
 
-    {"info",infoCommand,-1,
-     "ok-loading ok-stale random @dangerous",
-     0,NULL,0,0,0,0,0,0},
+    {"monitor", monitorCommand, 1, "admin no-script ok-loading ok-stale", 0,
+     NULL, 0, 0, 0, 0, 0, 0},
+    /* 获取redisObject对象的过期时间 */
+    {"ttl", ttlCommand, 2, "read-only fast random @keyspace", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+    /* 更新key的访问时间，避免被lru策略淘汰，使用频率较低 */
+    {"touch", touchCommand, -2, "read-only fast @keyspace", 0, NULL, 1, -1, 1,
+     0, 0, 0},
 
-    {"monitor",monitorCommand,1,
-     "admin no-script ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"pttl", pttlCommand, 2, "read-only fast random @keyspace", 0, NULL, 1, 1,
+     1, 0, 0, 0},
+    /* 移除key的过期时间 */
+    {"persist", persistCommand, 2, "write fast @keyspace", 0, NULL, 1, 1, 1, 0,
+     0, 0},
 
-    {"ttl",ttlCommand,2,
-     "read-only fast random @keyspace",
-     0,NULL,1,1,1,0,0,0},
+    {"slaveof", replicaofCommand, 3, "admin no-script ok-stale", 0, NULL, 0, 0,
+     0, 0, 0, 0},
 
-    {"touch",touchCommand,-2,
-     "read-only fast @keyspace",
-     0,NULL,1,-1,1,0,0,0},
+    {"replicaof", replicaofCommand, 3, "admin no-script ok-stale", 0, NULL, 0,
+     0, 0, 0, 0, 0},
 
-    {"pttl",pttlCommand,2,
-     "read-only fast random @keyspace",
-     0,NULL,1,1,1,0,0,0},
+    {"role", roleCommand, 1, "ok-loading ok-stale no-script fast @dangerous", 0,
+     NULL, 0, 0, 0, 0, 0, 0},
 
-    {"persist",persistCommand,2,
-     "write fast @keyspace",
-     0,NULL,1,1,1,0,0,0},
+    {"debug", debugCommand, -2, "admin no-script ok-loading ok-stale", 0, NULL,
+     0, 0, 0, 0, 0, 0},
 
-    {"slaveof",replicaofCommand,3,
-     "admin no-script ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"config", configCommand, -2, "admin ok-loading ok-stale no-script", 0,
+     NULL, 0, 0, 0, 0, 0, 0},
 
-    {"replicaof",replicaofCommand,3,
-     "admin no-script ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"subscribe", subscribeCommand, -2, "pub-sub no-script ok-loading ok-stale",
+     0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"role",roleCommand,1,
-     "ok-loading ok-stale no-script fast @dangerous",
-     0,NULL,0,0,0,0,0,0},
+    {"unsubscribe", unsubscribeCommand, -1,
+     "pub-sub no-script ok-loading ok-stale", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"debug",debugCommand,-2,
-     "admin no-script ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"psubscribe", psubscribeCommand, -2,
+     "pub-sub no-script ok-loading ok-stale", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"config",configCommand,-2,
-     "admin ok-loading ok-stale no-script",
-     0,NULL,0,0,0,0,0,0},
+    {"punsubscribe", punsubscribeCommand, -1,
+     "pub-sub no-script ok-loading ok-stale", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"subscribe",subscribeCommand,-2,
-     "pub-sub no-script ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"publish", publishCommand, 3,
+     "pub-sub ok-loading ok-stale fast may-replicate", 0, NULL, 0, 0, 0, 0, 0,
+     0},
 
-    {"unsubscribe",unsubscribeCommand,-1,
-     "pub-sub no-script ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"pubsub", pubsubCommand, -2, "pub-sub ok-loading ok-stale random", 0, NULL,
+     0, 0, 0, 0, 0, 0},
 
-    {"psubscribe",psubscribeCommand,-2,
-     "pub-sub no-script ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"watch", watchCommand, -2,
+     "no-script fast ok-loading ok-stale @transaction", 0, NULL, 1, -1, 1, 0, 0,
+     0},
 
-    {"punsubscribe",punsubscribeCommand,-1,
-     "pub-sub no-script ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"unwatch", unwatchCommand, 1,
+     "no-script fast ok-loading ok-stale @transaction", 0, NULL, 0, 0, 0, 0, 0,
+     0},
 
-    {"publish",publishCommand,3,
-     "pub-sub ok-loading ok-stale fast may-replicate",
-     0,NULL,0,0,0,0,0,0},
+    {"cluster", clusterCommand, -2, "admin ok-stale random", 0, NULL, 0, 0, 0,
+     0, 0, 0},
+    /* 将dump命令序列化后的数据进行反序列化，使用频率较低 */
+    {"restore", restoreCommand, -4, "write use-memory @keyspace @dangerous", 0,
+     NULL, 1, 1, 1, 0, 0, 0},
 
-    {"pubsub",pubsubCommand,-2,
-     "pub-sub ok-loading ok-stale random",
-     0,NULL,0,0,0,0,0,0},
+    {"restore-asking", restoreCommand, -4,
+     "write use-memory cluster-asking @keyspace @dangerous", 0, NULL, 1, 1, 1,
+     0, 0, 0},
+    /* 将指定key迁移到另一个Redis实例，一般用于运维迁移数据 */
+    {"migrate", migrateCommand, -6, "write random @keyspace @dangerous", 0,
+     migrateGetKeys, 3, 3, 1, 0, 0, 0},
 
-    {"watch",watchCommand,-2,
-     "no-script fast ok-loading ok-stale @transaction",
-     0,NULL,1,-1,1,0,0,0},
+    {"asking", askingCommand, 1, "fast @keyspace", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"unwatch",unwatchCommand,1,
-     "no-script fast ok-loading ok-stale @transaction",
-     0,NULL,0,0,0,0,0,0},
+    {"readonly", readonlyCommand, 1, "fast @keyspace", 0, NULL, 0, 0, 0, 0, 0,
+     0},
 
-    {"cluster",clusterCommand,-2,
-     "admin ok-stale random",
-     0,NULL,0,0,0,0,0,0},
+    {"readwrite", readwriteCommand, 1, "fast @keyspace", 0, NULL, 0, 0, 0, 0, 0,
+     0},
+    /* 指定key序列化，一般使用较少 */
+    {"dump", dumpCommand, 2, "read-only random @keyspace", 0, NULL, 1, 1, 1, 0,
+     0, 0},
+    /* 检测redis对象的内部属性 */
+    {"object", objectCommand, -2, "read-only random @keyspace", 0, NULL, 2, 2,
+     1, 0, 0, 0},
 
-    {"restore",restoreCommand,-4,
-     "write use-memory @keyspace @dangerous",
-     0,NULL,1,1,1,0,0,0},
+    {"memory", memoryCommand, -2, "random read-only", 0, memoryGetKeys, 0, 0, 0,
+     0, 0, 0},
 
-    {"restore-asking",restoreCommand,-4,
-    "write use-memory cluster-asking @keyspace @dangerous",
-    0,NULL,1,1,1,0,0,0},
+    {"client", clientCommand, -2,
+     "admin no-script random ok-loading ok-stale @connection", 0, NULL, 0, 0, 0,
+     0, 0, 0},
 
-    {"migrate",migrateCommand,-6,
-     "write random @keyspace @dangerous",
-     0,migrateGetKeys,3,3,1,0,0,0},
-
-    {"asking",askingCommand,1,
-     "fast @keyspace",
-     0,NULL,0,0,0,0,0,0},
-
-    {"readonly",readonlyCommand,1,
-     "fast @keyspace",
-     0,NULL,0,0,0,0,0,0},
-
-    {"readwrite",readwriteCommand,1,
-     "fast @keyspace",
-     0,NULL,0,0,0,0,0,0},
-
-    {"dump",dumpCommand,2,
-     "read-only random @keyspace",
-     0,NULL,1,1,1,0,0,0},
-
-    {"object",objectCommand,-2,
-     "read-only random @keyspace",
-     0,NULL,2,2,1,0,0,0},
-
-    {"memory",memoryCommand,-2,
-     "random read-only",
-     0,memoryGetKeys,0,0,0,0,0,0},
-
-    {"client",clientCommand,-2,
-     "admin no-script random ok-loading ok-stale @connection",
-     0,NULL,0,0,0,0,0,0},
-
-    {"hello",helloCommand,-1,
-     "no-auth no-script fast ok-loading ok-stale @connection",
-     0,NULL,0,0,0,0,0,0},
+    {"hello", helloCommand, -1,
+     "no-auth no-script fast ok-loading ok-stale @connection", 0, NULL, 0, 0, 0,
+     0, 0, 0},
 
     /* EVAL can modify the dataset, however it is not flagged as a write
      * command since we do the check while running commands from Lua.
-     * 
+     *
      * EVAL and EVALSHA also feed monitors before the commands are executed,
      * as opposed to after.
-      */
-    {"eval",evalCommand,-3,
-     "no-script no-monitor may-replicate @scripting",
-     0,evalGetKeys,0,0,0,0,0,0},
+     */
+    {"eval", evalCommand, -3, "no-script no-monitor may-replicate @scripting",
+     0, evalGetKeys, 0, 0, 0, 0, 0, 0},
 
-    {"evalsha",evalShaCommand,-3,
-     "no-script no-monitor may-replicate @scripting",
-     0,evalGetKeys,0,0,0,0,0,0},
+    {"evalsha", evalShaCommand, -3,
+     "no-script no-monitor may-replicate @scripting", 0, evalGetKeys, 0, 0, 0,
+     0, 0, 0},
 
-    {"slowlog",slowlogCommand,-2,
-     "admin random ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"slowlog", slowlogCommand, -2, "admin random ok-loading ok-stale", 0, NULL,
+     0, 0, 0, 0, 0, 0},
 
-    {"script",scriptCommand,-2,
-     "no-script may-replicate @scripting",
-     0,NULL,0,0,0,0,0,0},
+    {"script", scriptCommand, -2, "no-script may-replicate @scripting", 0, NULL,
+     0, 0, 0, 0, 0, 0},
 
-    {"time",timeCommand,1,
-     "random fast ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"time", timeCommand, 1, "random fast ok-loading ok-stale", 0, NULL, 0, 0,
+     0, 0, 0, 0},
 
-    {"bitop",bitopCommand,-4,
-     "write use-memory @bitmap",
-     0,NULL,2,-1,1,0,0,0},
+    {"bitop", bitopCommand, -4, "write use-memory @bitmap", 0, NULL, 2, -1, 1,
+     0, 0, 0},
 
-    {"bitcount",bitcountCommand,-2,
-     "read-only @bitmap",
-     0,NULL,1,1,1,0,0,0},
+    {"bitcount", bitcountCommand, -2, "read-only @bitmap", 0, NULL, 1, 1, 1, 0,
+     0, 0},
 
-    {"bitpos",bitposCommand,-3,
-     "read-only @bitmap",
-     0,NULL,1,1,1,0,0,0},
+    {"bitpos", bitposCommand, -3, "read-only @bitmap", 0, NULL, 1, 1, 1, 0, 0,
+     0},
 
-    {"wait",waitCommand,3,
-     "no-script @keyspace",
-     0,NULL,0,0,0,0,0,0},
+    {"wait", waitCommand, 3, "no-script @keyspace", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"command",commandCommand,-1,
-     "ok-loading ok-stale random @connection",
-     0,NULL,0,0,0,0,0,0},
+    {"command", commandCommand, -1, "ok-loading ok-stale random @connection", 0,
+     NULL, 0, 0, 0, 0, 0, 0},
 
-    {"geoadd",geoaddCommand,-5,
-     "write use-memory @geo",
-     0,NULL,1,1,1,0,0,0},
+    {"geoadd", geoaddCommand, -5, "write use-memory @geo", 0, NULL, 1, 1, 1, 0,
+     0, 0},
 
     /* GEORADIUS has store options that may write. */
-    {"georadius",georadiusCommand,-6,
-     "write use-memory @geo",
-     0,georadiusGetKeys,1,1,1,0,0,0},
+    {"georadius", georadiusCommand, -6, "write use-memory @geo", 0,
+     georadiusGetKeys, 1, 1, 1, 0, 0, 0},
 
-    {"georadius_ro",georadiusroCommand,-6,
-     "read-only @geo",
-     0,NULL,1,1,1,0,0,0},
+    {"georadius_ro", georadiusroCommand, -6, "read-only @geo", 0, NULL, 1, 1, 1,
+     0, 0, 0},
 
-    {"georadiusbymember",georadiusbymemberCommand,-5,
-     "write use-memory @geo",
-     0,georadiusGetKeys,1,1,1,0,0,0},
+    {"georadiusbymember", georadiusbymemberCommand, -5, "write use-memory @geo",
+     0, georadiusGetKeys, 1, 1, 1, 0, 0, 0},
 
-    {"georadiusbymember_ro",georadiusbymemberroCommand,-5,
-     "read-only @geo",
-     0,NULL,1,1,1,0,0,0},
+    {"georadiusbymember_ro", georadiusbymemberroCommand, -5, "read-only @geo",
+     0, NULL, 1, 1, 1, 0, 0, 0},
 
-    {"geohash",geohashCommand,-2,
-     "read-only @geo",
-     0,NULL,1,1,1,0,0,0},
+    {"geohash", geohashCommand, -2, "read-only @geo", 0, NULL, 1, 1, 1, 0, 0,
+     0},
 
-    {"geopos",geoposCommand,-2,
-     "read-only @geo",
-     0,NULL,1,1,1,0,0,0},
+    {"geopos", geoposCommand, -2, "read-only @geo", 0, NULL, 1, 1, 1, 0, 0, 0},
 
-    {"geodist",geodistCommand,-4,
-     "read-only @geo",
-     0,NULL,1,1,1,0,0,0},
+    {"geodist", geodistCommand, -4, "read-only @geo", 0, NULL, 1, 1, 1, 0, 0,
+     0},
 
-    {"geosearch",geosearchCommand,-7,
-     "read-only @geo",
-      0,NULL,1,1,1,0,0,0},
+    {"geosearch", geosearchCommand, -7, "read-only @geo", 0, NULL, 1, 1, 1, 0,
+     0, 0},
 
-    {"geosearchstore",geosearchstoreCommand,-8,
-     "write use-memory @geo",
-      0,NULL,1,2,1,0,0,0},
+    {"geosearchstore", geosearchstoreCommand, -8, "write use-memory @geo", 0,
+     NULL, 1, 2, 1, 0, 0, 0},
 
-    {"pfselftest",pfselftestCommand,1,
-     "admin @hyperloglog",
-      0,NULL,0,0,0,0,0,0},
+    {"pfselftest", pfselftestCommand, 1, "admin @hyperloglog", 0, NULL, 0, 0, 0,
+     0, 0, 0},
 
-    {"pfadd",pfaddCommand,-2,
-     "write use-memory fast @hyperloglog",
-     0,NULL,1,1,1,0,0,0},
+    {"pfadd", pfaddCommand, -2, "write use-memory fast @hyperloglog", 0, NULL,
+     1, 1, 1, 0, 0, 0},
 
     /* Technically speaking PFCOUNT may change the key since it changes the
      * final bytes in the HyperLogLog representation. However in this case
      * we claim that the representation, even if accessible, is an internal
      * affair, and the command is semantically read only. */
-    {"pfcount",pfcountCommand,-2,
-     "read-only may-replicate @hyperloglog",
-     0,NULL,1,-1,1,0,0,0},
+    {"pfcount", pfcountCommand, -2, "read-only may-replicate @hyperloglog", 0,
+     NULL, 1, -1, 1, 0, 0, 0},
 
-    {"pfmerge",pfmergeCommand,-2,
-     "write use-memory @hyperloglog",
-     0,NULL,1,-1,1,0,0,0},
+    {"pfmerge", pfmergeCommand, -2, "write use-memory @hyperloglog", 0, NULL, 1,
+     -1, 1, 0, 0, 0},
 
     /* Unlike PFCOUNT that is considered as a read-only command (although
      * it changes a bit), PFDEBUG may change the entire key when converting
      * from sparse to dense representation */
-    {"pfdebug",pfdebugCommand,-3,
-     "admin write use-memory @hyperloglog",
-     0,NULL,2,2,1,0,0,0},
+    {"pfdebug", pfdebugCommand, -3, "admin write use-memory @hyperloglog", 0,
+     NULL, 2, 2, 1, 0, 0, 0},
 
-    {"xadd",xaddCommand,-5,
-     "write use-memory fast random @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xadd", xaddCommand, -5, "write use-memory fast random @stream", 0, NULL,
+     1, 1, 1, 0, 0, 0},
 
-    {"xrange",xrangeCommand,-4,
-     "read-only @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xrange", xrangeCommand, -4, "read-only @stream", 0, NULL, 1, 1, 1, 0, 0,
+     0},
 
-    {"xrevrange",xrevrangeCommand,-4,
-     "read-only @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xrevrange", xrevrangeCommand, -4, "read-only @stream", 0, NULL, 1, 1, 1,
+     0, 0, 0},
 
-    {"xlen",xlenCommand,2,
-     "read-only fast @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xlen", xlenCommand, 2, "read-only fast @stream", 0, NULL, 1, 1, 1, 0, 0,
+     0},
 
-    {"xread",xreadCommand,-4,
-     "read-only @stream @blocking",
-     0,xreadGetKeys,0,0,0,0,0,0},
+    {"xread", xreadCommand, -4, "read-only @stream @blocking", 0, xreadGetKeys,
+     0, 0, 0, 0, 0, 0},
 
-    {"xreadgroup",xreadCommand,-7,
-     "write @stream @blocking",
-     0,xreadGetKeys,0,0,0,0,0,0},
+    {"xreadgroup", xreadCommand, -7, "write @stream @blocking", 0, xreadGetKeys,
+     0, 0, 0, 0, 0, 0},
 
-    {"xgroup",xgroupCommand,-2,
-     "write use-memory @stream",
-     0,NULL,2,2,1,0,0,0},
+    {"xgroup", xgroupCommand, -2, "write use-memory @stream", 0, NULL, 2, 2, 1,
+     0, 0, 0},
 
-    {"xsetid",xsetidCommand,3,
-     "write use-memory fast @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xsetid", xsetidCommand, 3, "write use-memory fast @stream", 0, NULL, 1, 1,
+     1, 0, 0, 0},
 
-    {"xack",xackCommand,-4,
-     "write fast random @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xack", xackCommand, -4, "write fast random @stream", 0, NULL, 1, 1, 1, 0,
+     0, 0},
 
-    {"xpending",xpendingCommand,-3,
-     "read-only random @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xpending", xpendingCommand, -3, "read-only random @stream", 0, NULL, 1, 1,
+     1, 0, 0, 0},
 
-    {"xclaim",xclaimCommand,-6,
-     "write random fast @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xclaim", xclaimCommand, -6, "write random fast @stream", 0, NULL, 1, 1, 1,
+     0, 0, 0},
 
-    {"xautoclaim",xautoclaimCommand,-6,
-     "write random fast @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xautoclaim", xautoclaimCommand, -6, "write random fast @stream", 0, NULL,
+     1, 1, 1, 0, 0, 0},
 
-    {"xinfo",xinfoCommand,-2,
-     "read-only random @stream",
-     0,NULL,2,2,1,0,0,0},
+    {"xinfo", xinfoCommand, -2, "read-only random @stream", 0, NULL, 2, 2, 1, 0,
+     0, 0},
 
-    {"xdel",xdelCommand,-3,
-     "write fast @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xdel", xdelCommand, -3, "write fast @stream", 0, NULL, 1, 1, 1, 0, 0, 0},
 
-    {"xtrim",xtrimCommand,-4,
-     "write random @stream",
-     0,NULL,1,1,1,0,0,0},
+    {"xtrim", xtrimCommand, -4, "write random @stream", 0, NULL, 1, 1, 1, 0, 0,
+     0},
 
-    {"post",securityWarningCommand,-1,
-     "ok-loading ok-stale read-only",
-     0,NULL,0,0,0,0,0,0},
+    {"post", securityWarningCommand, -1, "ok-loading ok-stale read-only", 0,
+     NULL, 0, 0, 0, 0, 0, 0},
 
-    {"host:",securityWarningCommand,-1,
-     "ok-loading ok-stale read-only",
-     0,NULL,0,0,0,0,0,0},
+    {"host:", securityWarningCommand, -1, "ok-loading ok-stale read-only", 0,
+     NULL, 0, 0, 0, 0, 0, 0},
 
-    {"latency",latencyCommand,-2,
-     "admin no-script ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"latency", latencyCommand, -2, "admin no-script ok-loading ok-stale", 0,
+     NULL, 0, 0, 0, 0, 0, 0},
 
-    {"lolwut",lolwutCommand,-1,
-     "read-only fast",
-     0,NULL,0,0,0,0,0,0},
+    {"lolwut", lolwutCommand, -1, "read-only fast", 0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"acl",aclCommand,-2,
-     "admin no-script ok-loading ok-stale",
-     0,NULL,0,0,0,0,0,0},
+    {"acl", aclCommand, -2, "admin no-script ok-loading ok-stale", 0, NULL, 0,
+     0, 0, 0, 0, 0},
 
-    {"stralgo",stralgoCommand,-2,
-     "read-only @string",
-     0,lcsGetKeys,0,0,0,0,0,0},
+    {"stralgo", stralgoCommand, -2, "read-only @string", 0, lcsGetKeys, 0, 0, 0,
+     0, 0, 0},
 
-    {"reset",resetCommand,1,
-     "no-script ok-stale ok-loading fast @connection",
-     0,NULL,0,0,0,0,0,0},
+    {"reset", resetCommand, 1, "no-script ok-stale ok-loading fast @connection",
+     0, NULL, 0, 0, 0, 0, 0, 0},
 
-    {"failover",failoverCommand,-1,
-     "admin no-script ok-stale",
-     0,NULL,0,0,0,0,0,0}
-};
+    {"failover", failoverCommand, -1, "admin no-script ok-stale", 0, NULL, 0, 0,
+     0, 0, 0, 0}};
 
 /*============================ Utility functions ============================ */
 
@@ -2385,9 +2147,12 @@ extern int ProcessingEventsWhileBlocked;
  *
  * The most important is freeClientsInAsyncFreeQueue but we also
  * call some other low-risk functions. */
+
+/* 每次处理事件之前执行 */
 void beforeSleep(struct aeEventLoop *eventLoop) {
     UNUSED(eventLoop);
 
+    /* 更新内存最大使用量的状态 */
     size_t zmalloc_used = zmalloc_used_memory();
     if (zmalloc_used > server.stat_peak_memory)
         server.stat_peak_memory = zmalloc_used;
@@ -2407,7 +2172,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
         return;
     }
 
-    /* Handle precise timeouts of blocked clients. */
+    /* 处理被阻止客户端的精确超时 */
     handleBlockedClientsTimeout();
 
     /* We should handle pending reads clients ASAP after event loop. */
@@ -2427,6 +2192,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
 
     /* Run a fast expire cycle (the called function will return
      * ASAP if a fast cycle is not needed). */
+    /* Master server，执行一次快速的主动过期检查 */
     if (server.active_expire_enabled && server.masterhost == NULL)
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
 
@@ -2471,7 +2237,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
      * client side caching protocol in broadcasting (BCAST) mode. */
     trackingBroadcastInvalidationMessages();
 
-    /* Write the AOF buffer on disk */
+    /* 将 AOF 缓冲区的内容写入到 AOF 文件 */
     if (server.aof_state == AOF_ON)
         flushAppendOnlyFile(0);
 
@@ -3048,8 +2814,9 @@ void closeSocketListeners(socketFds *sfd) {
     sfd->count = 0;
 }
 
-/* Create an event handler for accepting new connections in TCP or TLS domain sockets.
- * This works atomically for all socket fds */
+/* 创建一个事件处理程序以接受 TCP 或 TLS 域套接字中的新连接。 这适用于所有套接字
+ * fd，socket的读写事件被抽象为文件事件，因此对于监听的socket创建对应的文件事件
+ */
 int createSocketAcceptHandler(socketFds *sfd, aeFileProc *accept_handler) {
     int j;
 
@@ -3081,27 +2848,30 @@ int createSocketAcceptHandler(socketFds *sfd, aeFileProc *accept_handler) {
  * impossible to bind, or no bind addresses were specified in the server
  * configuration but the function is not able to bind * for at least
  * one of the IPv4 or IPv6 protocols. */
+/* 初始化一系列的文件描述符来监听指定端口，绑定的地址由config文件指定
+ */
 int listenToPort(int port, socketFds *sfd) {
     int j;
     char **bindaddr = server.bindaddr;
     int bindaddr_count = server.bindaddr_count;
-    char *default_bindaddr[2] = {"*", "-::*"};
+    char *default_bindaddr[2] = {"*", "-::*"}; /* 默认绑定地址 */
 
     /* Force binding of 0.0.0.0 if no bind address is specified. */
+    /* 如果绑定地址未指定，强行绑定0.0.0.0地址 */
     if (server.bindaddr_count == 0) {
         bindaddr_count = 2;
         bindaddr = default_bindaddr;
     }
-
+    /* 创建socket并启动监听，文件描述符存储在fds数组作为返回参数 */
     for (j = 0; j < bindaddr_count; j++) {
         char* addr = bindaddr[j];
         int optional = *addr == '-';
         if (optional) addr++;
         if (strchr(addr,':')) {
-            /* Bind IPv6 address. */
+            /* 绑定IPv6地址 */
             sfd->fd[sfd->count] = anetTcp6Server(server.neterr,port,addr,server.tcp_backlog);
         } else {
-            /* Bind IPv4 address. */
+            /* 绑定IPv4地址 */
             sfd->fd[sfd->count] = anetTcpServer(server.neterr,port,addr,server.tcp_backlog);
         }
         if (sfd->fd[sfd->count] == ANET_ERR) {
@@ -3116,10 +2886,11 @@ int listenToPort(int port, socketFds *sfd) {
                 net_errno == EAFNOSUPPORT)
                 continue;
 
-            /* Rollback successful listens before exiting */
+            /* 出现错误，回退之前绑定成功的地址 */
             closeSocketListeners(sfd);
             return C_ERR;
         }
+        /* 设置socket为非阻塞IO */
         anetNonBlock(NULL,sfd->fd[sfd->count]);
         anetCloexec(sfd->fd[sfd->count]);
         sfd->count++;
@@ -3280,6 +3051,8 @@ void initServer(void) {
     /* 创建 Redis 数据库，并初始化其他内部状态 */
     for (j = 0; j < server.dbnum; j++) {
         server.db[j].dict = dictCreate(&dbDictType,NULL);
+        /* expire字典里并没有设置 destructor 函数，
+         * 因为其key和value对象是与主dict共享的 */
         server.db[j].expires = dictCreate(&dbExpiresDictType,NULL);
         server.db[j].expires_cursor = 0;
         server.db[j].blocking_keys = dictCreate(&keylistDictType,NULL);
@@ -3362,6 +3135,7 @@ void initServer(void) {
     if (createSocketAcceptHandler(&server.tlsfd, acceptTLSHandler) != C_OK) {
         serverPanic("Unrecoverable error creating TLS socket accept handler.");
     }
+    /* 接收客户端UNIX连接的处理函数为acceptUnixHandler */
     if (server.sofd > 0 && aeCreateFileEvent(server.el,server.sofd,AE_READABLE,
         acceptUnixHandler,NULL) == AE_ERR) serverPanic("Unrecoverable error creating server.sofd file event.");
 
@@ -3375,8 +3149,8 @@ void initServer(void) {
                 "blocked clients subsystem.");
     }
 
-    /* Register before and after sleep handlers (note this needs to be done
-     * before loading persistence since it is used by processEventsWhileBlocked. */
+    /* 在睡眠处理程序之前和之后注册（注意这需要在加载持久性之前完成，
+     * 因为它被processEventsWhileBlocked 使用。） */
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
 
@@ -3417,8 +3191,8 @@ void initServer(void) {
  * Thread Local Storage initialization collides with dlopen call.
  * see: https://sourceware.org/bugzilla/show_bug.cgi?id=19329 */
 void InitServerLast() {
-    bioInit();
-    initThreadedIO();
+    bioInit();        /* 初始化bio系统 */
+    initThreadedIO(); /* 初始化Thread I/O系统 */
     set_jemalloc_bg_thread(server.jemalloc_bg_thread);
     server.initial_memory_usage = zmalloc_used_memory();
 }
@@ -4005,7 +3779,17 @@ static int cmdHasMovableKeys(struct redisCommand *cmd) {
  *
  * If C_OK is returned the client is still alive and valid and
  * other operations can be performed by the caller. Otherwise
- * if C_ERR is returned the client was destroyed (i.e. after QUIT). */
+ * if C_ERR is returned the client was destroyed (i.e. after QUIT).
+ *
+ * 这个函数执行时，我们已经读入了一个完整的命令到客户端，
+ * 这个函数负责执行这个命令，
+ * 或者服务器准备从客户端中进行一次读取
+ *
+ * 如果这个函数返回 1 ，那么表示客户端在执行命令之后仍然存在，
+ * 调用者可以继续执行其他操作。
+ * 否则，如果这个函数返回 0 ，那么表示客户端已经被销毁。
+ *
+ * */
 int processCommand(client *c) {
     if (!server.lua_timedout) {
         /* Both EXEC and EVAL call call() directly so there should be
@@ -4023,6 +3807,7 @@ int processCommand(client *c) {
      * go through checking for replication and QUIT will cause trouble
      * when FORCE_REPLICATION is enabled and would be implemented in
      * a regular command proc. */
+    /* 如果是quit命令直接返回并关闭客户端 */
     if (!strcasecmp(c->argv[0]->ptr,"quit")) {
         addReply(c,shared.ok);
         c->flags |= CLIENT_CLOSE_AFTER_REPLY;
@@ -4031,8 +3816,12 @@ int processCommand(client *c) {
 
     /* Now lookup the command and check ASAP about trivial error conditions
      * such as wrong arity, bad command name and so forth. */
+    /* 查找命令，并进行命令合法性检查，以及命令参数个数检查
+     * 执行函数lookupCommand查找命令后，如果命令不存在返回错误
+     */
     c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);
     if (!c->cmd) {
+        /* 没找到指定的命令 */
         sds args = sdsempty();
         int i;
         for (i=1; i < c->argc && sdslen(args) < 128; i++)
@@ -4043,6 +3832,11 @@ int processCommand(client *c) {
         return C_OK;
     } else if ((c->cmd->arity > 0 && c->cmd->arity != c->argc) ||
                (c->argc < -c->cmd->arity)) {
+        /* 参数个数错误
+         * 当arity小于0时，表示命令参数数目大于等于arity的绝对值；当arity大于0时，
+         * 表示命令参数数目必须为arity。注意命令请求中命令的名称本身也是一个参数
+         */
+
         rejectCommandFormat(c,"wrong number of arguments for '%s' command",
             c->cmd->name);
         return C_OK;
@@ -4060,7 +3854,11 @@ int processCommand(client *c) {
                                  (c->cmd->proc == execCommand && (c->mstate.cmd_inv_flags & CMD_LOADING));
     int is_may_replicate_command = (c->cmd->flags & (CMD_WRITE | CMD_MAY_REPLICATE)) ||
                                    (c->cmd->proc == execCommand && (c->mstate.cmd_flags & (CMD_WRITE | CMD_MAY_REPLICATE)));
-
+    /* 检查认证信息
+     * 如果配置文件中使用指令"requirepass password"设置了密码，
+     * 且客户端没未认证通过，只能执行auth命令，
+     * auth命令格式为"AUTH password"
+     */
     if (authRequired(c)) {
         /* AUTH and HELLO and no auth commands are valid even in
          * non-authenticated state. */
@@ -4070,8 +3868,7 @@ int processCommand(client *c) {
         }
     }
 
-    /* Check if the user can run this command according to the current
-     * ACLs. */
+    /* 检查用户是否可以根据当前的 ACL 运行该命令。 */
     int acl_errpos;
     int acl_retval = ACLCheckAllPerm(c,&acl_errpos);
     if (acl_retval != ACL_OK) {
@@ -4285,7 +4082,7 @@ int processCommand(client *c) {
         return C_OK;       
     }
 
-    /* Exec the command */
+    /* 执行命令 */
     if (c->flags & CLIENT_MULTI &&
         c->cmd->proc != execCommand && c->cmd->proc != discardCommand &&
         c->cmd->proc != multiCommand && c->cmd->proc != watchCommand &&
@@ -6453,7 +6250,7 @@ int main(int argc, char **argv) {
 
     redisSetCpuAffinity(server.server_cpulist);
     setOOMScoreAdj(-1);
-
+    /* 开启事件主循环 */
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
     return 0;

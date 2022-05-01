@@ -292,7 +292,9 @@ unsigned long LFUGetTimeInMinutes(void) {
  * that elapsed since the last access. Handle overflow (ldt greater than
  * the current 16 bits minutes time) considering the time as wrapping
  * exactly once. */
+/* 获取已经过去的分钟数*/
 unsigned long LFUTimeElapsed(unsigned long ldt) {
+    /* 获取当前时间分钟数，最大65535 */
     unsigned long now = LFUGetTimeInMinutes();
     if (now >= ldt) return now-ldt;
     return 65535-ldt+now;
@@ -300,11 +302,13 @@ unsigned long LFUTimeElapsed(unsigned long ldt) {
 
 /* Logarithmically increment a counter. The greater is the current counter value
  * the less likely is that it gets really implemented. Saturate it at 255. */
+/* 增加访问频率 */
 uint8_t LFULogIncr(uint8_t counter) {
     if (counter == 255) return 255;
     double r = (double)rand()/RAND_MAX;
     double baseval = counter - LFU_INIT_VAL;
     if (baseval < 0) baseval = 0;
+    /* 访问频率算法，lfu_log_factor为可配置的概率因子，默认为10 */
     double p = 1.0/(baseval*server.lfu_log_factor+1);
     if (r < p) counter++;
     return counter;
@@ -320,9 +324,11 @@ uint8_t LFULogIncr(uint8_t counter) {
  * This function is used in order to scan the dataset for the best object
  * to fit: as we check for the candidate, we incrementally decrement the
  * counter of the scanned objects if needed. */
+/* 获取访问对象频率 */
 unsigned long LFUDecrAndReturn(robj *o) {
-    unsigned long ldt = o->lru >> 8;
-    unsigned long counter = o->lru & 255;
+    unsigned long ldt = o->lru >> 8;      /* 高24位表示访问间隔 */
+    unsigned long counter = o->lru & 255; /* 低8位表示访问次数 */
+    /* 衰减算法：lfu_decay_time为可配置的衰减因子，默认为1（分钟）*/
     unsigned long num_periods = server.lfu_decay_time ? LFUTimeElapsed(ldt) / server.lfu_decay_time : 0;
     if (num_periods)
         counter = (num_periods > counter) ? 0 : counter - num_periods;

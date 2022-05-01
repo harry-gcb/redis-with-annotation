@@ -6,11 +6,13 @@
 static redisAtomic size_t lazyfree_objects = 0;
 static redisAtomic size_t lazyfreed_objects = 0;
 
-/* Release objects from the lazyfree thread. It's just decrRefCount()
- * updating the count of objects to release. */
+/* 从lazyfree 线程释放对象。
+ * 它只是 decrRefCount() 更新要释放的对象的引用计数
+ */
 void lazyfreeFreeObject(void *args[]) {
     robj *o = (robj *) args[0];
     decrRefCount(o);
+    /* 这里为什么减1又加1？ */
     atomicDecr(lazyfree_objects,1);
     atomicIncr(lazyfreed_objects,1);
 }
@@ -85,20 +87,26 @@ size_t lazyfreeGetFreedObjectsCount(void) {
  *
  * For lists the function returns the number of elements in the quicklist
  * representing the list. */
+/* 计算删除对象需要的工作量 */
 size_t lazyfreeGetFreeEffort(robj *key, robj *obj) {
     if (obj->type == OBJ_LIST) {
+        /* 列表对象 */
         quicklist *ql = obj->ptr;
         return ql->len;
     } else if (obj->type == OBJ_SET && obj->encoding == OBJ_ENCODING_HT) {
+        /* 集合对象且编码为散列表 */
         dict *ht = obj->ptr;
         return dictSize(ht);
     } else if (obj->type == OBJ_ZSET && obj->encoding == OBJ_ENCODING_SKIPLIST){
+        /* 有序集合且编码为跳表 */
         zset *zs = obj->ptr;
         return zs->zsl->length;
     } else if (obj->type == OBJ_HASH && obj->encoding == OBJ_ENCODING_HT) {
         dict *ht = obj->ptr;
+        /* 散列对象且编码为散列对象 */
         return dictSize(ht);
     } else if (obj->type == OBJ_STREAM) {
+        /* 流对象 */
         size_t effort = 0;
         stream *s = obj->ptr;
 
@@ -123,6 +131,7 @@ size_t lazyfreeGetFreeEffort(robj *key, robj *obj) {
         }
         return effort;
     } else if (obj->type == OBJ_MODULE) {
+        /* 模块对象 */
         moduleValue *mv = obj->ptr;
         moduleType *mt = mv->type;
         if (mt->free_effort != NULL) {
@@ -134,6 +143,7 @@ size_t lazyfreeGetFreeEffort(robj *key, robj *obj) {
             return 1;
         }
     } else {
+        /* 其他情况返回1 */
         return 1; /* Everything else is a single allocation. */
     }
 }
@@ -141,24 +151,27 @@ size_t lazyfreeGetFreeEffort(robj *key, robj *obj) {
 /* Delete a key, value, and associated expiration entry if any, from the DB.
  * If there are enough allocations to free the value object may be put into
  * a lazy free list instead of being freed synchronously. The lazy free list
- * will be reclaimed in a different bio.c thread. */
+ * will be reclaimed in a different bio.c thread.
+ * 从数据库中删除键、值和关联的过期条目（如果有）。
+ * 如果有足够的空间来释放值对象，则可以将其放入惰性释放列表中，而不是同步释放。
+ * 惰性空闲列表将在不同的 bio.c 线程中回收。
+ * */
 #define LAZYFREE_THRESHOLD 64
 int dbAsyncDelete(redisDb *db, robj *key) {
-    /* Deleting an entry from the expires dict will not free the sds of
-     * the key, because it is shared with the main dictionary. */
+    /* 从 expires 字典中删除条目不会释放 key 的 sds 对象，
+     * 因为它与主字典共享 */
     if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
 
-    /* If the value is composed of a few allocations, to free in a lazy way
-     * is actually just slower... So under a certain limit we just free
-     * the object synchronously. */
+    /* 如果该值由几个空间组成，那么以惰性方式释放实际上反而更慢
+     * 所以在一定的限制下，我们只是同步释放对象。 */
     dictEntry *de = dictUnlink(db->dict,key->ptr);
     if (de) {
         robj *val = dictGetVal(de);
 
         /* Tells the module that the key has been unlinked from the database. */
         moduleNotifyKeyUnlink(key,val);
-
-        size_t free_effort = lazyfreeGetFreeEffort(key,val);
+        /* 返回释放对象需要的工作量，字符串对象始终返回1 */
+        size_t free_effort = lazyfreeGetFreeEffort(key, val);
 
         /* If releasing the object is too much work, do it in the background
          * by adding the object to the lazy free list.
@@ -168,15 +181,17 @@ int dbAsyncDelete(redisDb *db, robj *key) {
          * objects, and then call dbDelete(). In this case we'll fall
          * through and reach the dictFreeUnlinkedEntry() call, that will be
          * equivalent to just calling decrRefCount(). */
+        /* 工作量大于阈值，且没有被贝德对象引用 LAZYFREE_THRESHOLD = 64*/
         if (free_effort > LAZYFREE_THRESHOLD && val->refcount == 1) {
             atomicIncr(lazyfree_objects,1);
-            bioCreateLazyFreeJob(lazyfreeFreeObject,1, val);
+            /* 创建后台job，将val加入异步删除队列 */
+            bioCreateLazyFreeJob(lazyfreeFreeObject, 1, val);
             dictSetVal(db->dict,de,NULL);
         }
     }
 
-    /* Release the key-val pair, or just the key if we set the val
-     * field to NULL in order to lazy free it later. */
+    /* 释放 key-val 对，或者如果我们将 val 字段设置为 NULL 则只释放key，
+     * 以便稍后延迟释放它。 */
     if (de) {
         dictFreeUnlinkedEntry(db->dict,de);
         if (server.cluster_enabled) slotToKeyDel(key->ptr);

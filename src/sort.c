@@ -189,6 +189,7 @@ int sortCompare(const void *s1, const void *s2) {
 
 /* The SORT command is the most complex command in Redis. Warning: this code
  * is optimized for speed and a bit less for readability */
+/* 返回或保存List、Set、Zset类型的key中排序后的元素 */
 void sortCommand(client *c) {
     list *operations;
     unsigned int outputlen = 0;

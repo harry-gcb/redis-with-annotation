@@ -5035,15 +5035,29 @@ NULL
  * -------------------------------------------------------------------------- */
 
 /* Generates a DUMP-format representation of the object 'o', adding it to the
- * io stream pointed by 'rio'. This function can't fail. */
+ * io stream pointed by 'rio'. This function can't fail.
+ * 创建对象 o 的一个 DUMP 格式表示，并将它添加到 rio 指针指向的 io 流当中
+ */
 void createDumpPayload(rio *payload, robj *o, robj *key) {
     unsigned char buf[2];
     uint64_t crc;
 
     /* Serialize the object in an RDB-like format. It consist of an object type
      * byte followed by the serialized object. This is understood by RESTORE. */
-    rioInitWithBuffer(payload,sdsempty());
-    serverAssert(rdbSaveObjectType(payload,o));
+    /* 将对象序列化为一个 RDB 格式对象
+     * 序列化对象以对象类型为首，后跟序列化后的对象
+     * 如图
+     *
+     * |<-- RDB payload  -->|
+     *      序列化数据
+     * +-------------+------+
+     * | 1 byte type | obj  |
+     * +-------------+------+
+     * */
+    rioInitWithBuffer(payload, sdsempty()); /* 初始化payload */
+    /* 序列化对象类型，并以此开头 */
+    serverAssert(rdbSaveObjectType(payload, o));
+    /* 序列化对象 */
     serverAssert(rdbSaveObject(payload,o,key));
 
     /* Write the footer, this is how it looks like:
@@ -5054,14 +5068,20 @@ void createDumpPayload(rio *payload, robj *o, robj *key) {
      */
 
     /* RDB version */
-    buf[0] = RDB_VERSION & 0xff;
-    buf[1] = (RDB_VERSION >> 8) & 0xff;
+    buf[0] = RDB_VERSION & 0xff;        /* 保存version的低八位 */
+    buf[1] = (RDB_VERSION >> 8) & 0xff; /* 保存version的高八位 */
+    /* 追加version到payload */
     payload->io.buffer.ptr = sdscatlen(payload->io.buffer.ptr,buf,2);
 
     /* CRC64 */
     crc = crc64(0,(unsigned char*)payload->io.buffer.ptr,
                 sdslen(payload->io.buffer.ptr));
+    /* 对于目标机器是大端字节序的case，进行字节码转换，
+     * 使得不同字节序机器生成的rdb文件格式都是统一的（小端字节序）
+     * 便于兼容
+     */
     memrev64ifbe(&crc);
+    /* 追加crc到payload */
     payload->io.buffer.ptr = sdscatlen(payload->io.buffer.ptr,&crc,8);
 }
 
@@ -5093,26 +5113,32 @@ int verifyDumpPayload(unsigned char *p, size_t len) {
 
 /* DUMP keyname
  * DUMP is actually not used by Redis Cluster but it is the obvious
- * complement of RESTORE and can be useful for different applications. */
+ * complement of RESTORE and can be useful for different applications.
+ * DUMP 实际上并没有被 Redis Cluster 使用，但它是 RESTORE
+ * 的明显补充，可用于不同的应用程序。
+ * */
+/* 序列化key并返回序列化后的数据 */
 void dumpCommand(client *c) {
     robj *o;
     rio payload;
 
-    /* Check if the key is here. */
+    /* 检查key是否存在，取出给定key的值对象 */
     if ((o = lookupKeyRead(c->db,c->argv[1])) == NULL) {
         addReplyNull(c);
         return;
     }
 
-    /* Create the DUMP encoded representation. */
+    /* 创建给定值的一个 DUMP 编码表示，组装序列化数据. */
     createDumpPayload(&payload,o,c->argv[1]);
 
-    /* Transfer to the client */
+    /* 将编码后的键值对数据返回给客户端 */
     addReplyBulkSds(c,payload.io.buffer.ptr);
     return;
 }
 
-/* RESTORE key ttl serialized-value [REPLACE] */
+/* RESTORE key ttl serialized-value [REPLACE]
+ * 根据给定的 DUMP 数据，还原出一个键值对数据，并将它保存到数据库里面
+ */
 void restoreCommand(client *c) {
     long long ttl, lfu_freq = -1, lru_idle = -1, lru_clock = -1;
     rio payload;
@@ -5123,12 +5149,13 @@ void restoreCommand(client *c) {
     for (j = 4; j < c->argc; j++) {
         int additional = c->argc-j-1;
         if (!strcasecmp(c->argv[j]->ptr,"replace")) {
-            replace = 1;
+            replace = 1; /* 是否使用了 REPLACE 选项？ */
         } else if (!strcasecmp(c->argv[j]->ptr,"absttl")) {
-            absttl = 1;
+            absttl = 1; /* 是否使用absttl选项 */
         } else if (!strcasecmp(c->argv[j]->ptr,"idletime") && additional >= 1 &&
                    lfu_freq == -1)
         {
+            /* 是否使用idletime选项 */
             if (getLongLongFromObjectOrReply(c,c->argv[j+1],&lru_idle,NULL)
                     != C_OK) return;
             if (lru_idle < 0) {
@@ -5140,6 +5167,7 @@ void restoreCommand(client *c) {
         } else if (!strcasecmp(c->argv[j]->ptr,"freq") && additional >= 1 &&
                    lru_idle == -1)
         {
+            /* 是否使用freq选项 */
             if (getLongLongFromObjectOrReply(c,c->argv[j+1],&lfu_freq,NULL)
                     != C_OK) return;
             if (lfu_freq < 0 || lfu_freq > 255) {
@@ -5148,19 +5176,20 @@ void restoreCommand(client *c) {
             }
             j++; /* Consume additional arg. */
         } else {
+            /* 参数错误 */
             addReplyErrorObject(c,shared.syntaxerr);
             return;
         }
     }
 
-    /* Make sure this key does not already exist here... */
+    /* 如果没有给定 REPLACE 选项，并且键已经存在，那么返回错误 */
     robj *key = c->argv[1];
     if (!replace && lookupKeyWrite(c->db,key) != NULL) {
         addReplyErrorObject(c,shared.busykeyerr);
         return;
     }
 
-    /* Check if the TTL value makes sense */
+    /* 取出（可能有的） TTL 值 */
     if (getLongLongFromObjectOrReply(c,c->argv[2],&ttl,NULL) != C_OK) {
         return;
     } else if (ttl < 0) {
@@ -5168,13 +5197,13 @@ void restoreCommand(client *c) {
         return;
     }
 
-    /* Verify RDB version and data checksum. */
+    /*检查 RDB 版本和校验和 */
     if (verifyDumpPayload(c->argv[3]->ptr,sdslen(c->argv[3]->ptr)) == C_ERR)
     {
         addReplyError(c,"DUMP payload version or checksum are wrong");
         return;
     }
-
+    /* 读取 DUMP 数据，并反序列化出键值对的类型和值 */
     rioInitWithBuffer(&payload,c->argv[3]->ptr);
     if (((type = rdbLoadObjectType(&payload)) == -1) ||
         ((obj = rdbLoadObject(type,&payload,key->ptr,NULL)) == NULL))
@@ -5183,7 +5212,7 @@ void restoreCommand(client *c) {
         return;
     }
 
-    /* Remove the old key if needed. */
+    /* 如果给定了 REPLACE 选项，那么先删除数据库中已存在的同名键 */
     int deleted = 0;
     if (replace)
         deleted = dbDelete(c->db,key);
@@ -5201,8 +5230,9 @@ void restoreCommand(client *c) {
         return;
     }
 
-    /* Create the key and set the TTL if any */
+    /* 将键值对添加到数据库 */
     dbAdd(c->db,key,obj);
+    /* 如果键带有 TTL 的话，设置键的 TTL */
     if (ttl) {
         setExpire(c,c->db,key,ttl);
     }
@@ -5329,6 +5359,7 @@ void migrateCloseTimedoutSockets(void) {
  *
  * MIGRATE host port "" dbid timeout [COPY | REPLACE | AUTH password |
  *         AUTH2 username password] KEYS key1 key2 ... keyN */
+/* 将key原子性地从当前实例传送到目标实例的指定数据库上 */
 void migrateCommand(client *c) {
     migrateCachedSocket *cs;
     int copy = 0, replace = 0, j;
@@ -5348,14 +5379,15 @@ void migrateCommand(client *c) {
     int first_key = 3; /* Argument index of the first key. */
     int num_keys = 1;  /* By default only migrate the 'key' argument. */
 
-    /* Parse additional options */
+    /* 解析可选参数 */
     for (j = 6; j < c->argc; j++) {
         int moreargs = (c->argc-1) - j;
         if (!strcasecmp(c->argv[j]->ptr,"copy")) {
-            copy = 1;
+            copy = 1; /* 选项copy表示保留当前实例的key */
         } else if (!strcasecmp(c->argv[j]->ptr,"replace")) {
-            replace = 1;
+            replace = 1; /* 选项replace表示覆盖目标实例上的key */
         } else if (!strcasecmp(c->argv[j]->ptr,"auth")) {
+            /* auth选项表示 密码 验证*/
             if (!moreargs) {
                 addReplyErrorObject(c,shared.syntaxerr);
                 return;
@@ -5368,6 +5400,7 @@ void migrateCommand(client *c) {
                 addReplyErrorObject(c,shared.syntaxerr);
                 return;
             }
+            /* auth2 选项表示 用户名 密码 验证*/
             username = c->argv[++j]->ptr;
             redactClientCommandArgument(c,j);
             password = c->argv[++j]->ptr;
@@ -5379,16 +5412,18 @@ void migrateCommand(client *c) {
                     " must be set to the empty string");
                 return;
             }
+            /* keys表示 多个key */
             first_key = j+1;
             num_keys = c->argc - j - 1;
             break; /* All the remaining args are keys. */
         } else {
+            /* 不可用参数 */
             addReplyErrorObject(c,shared.syntaxerr);
             return;
         }
     }
 
-    /* Sanity check */
+    /* 检查输入参数的正确性，并从输入参数中获取 目标数据库id，timeout */
     if (getLongFromObjectOrReply(c,c->argv[5],&timeout,NULL) != C_OK ||
         getLongFromObjectOrReply(c,c->argv[4],&dbid,NULL) != C_OK)
     {
@@ -5404,13 +5439,14 @@ void migrateCommand(client *c) {
     ov = zrealloc(ov,sizeof(robj*)*num_keys);
     kv = zrealloc(kv,sizeof(robj*)*num_keys);
     int oi = 0;
-
+    /* 取出键的值对象 */
     for (j = 0; j < num_keys; j++) {
         if ((ov[oi] = lookupKeyRead(c->db,c->argv[first_key+j])) != NULL) {
             kv[oi] = c->argv[first_key+j];
             oi++;
         }
     }
+    /* oi==0，则表示输入的key值都不存在 */
     num_keys = oi;
     if (num_keys == 0) {
         zfree(ov); zfree(kv);
@@ -5421,7 +5457,7 @@ void migrateCommand(client *c) {
 try_again:
     write_error = 0;
 
-    /* Connect */
+    /* 获取套接字连接，连接到目标redis */
     cs = migrateGetSocket(c,c->argv[1],c->argv[2],timeout);
     if (cs == NULL) {
         zfree(ov); zfree(kv);
@@ -5432,6 +5468,7 @@ try_again:
 
     /* Authentication */
     if (password) {
+        /* 服务器校验，校验用户名和密码 */
         int arity = username ? 3 : 2;
         serverAssertWithInfo(c,NULL,rioWriteBulkCount(&cmd,'*',arity));
         serverAssertWithInfo(c,NULL,rioWriteBulkString(&cmd,"AUTH",4));
@@ -5444,6 +5481,7 @@ try_again:
     }
 
     /* Send the SELECT command if the current DB is not already selected. */
+    /* 创建用于指定数据库的 SELECT 命令，以免键值对被还原到了错误的地方 */
     int select = cs->last_dbid != dbid; /* Should we emit SELECT? */
     if (select) {
         serverAssertWithInfo(c,NULL,rioWriteBulkCount(&cmd,'*',2));
@@ -5457,6 +5495,7 @@ try_again:
                             lookupKey() function, may be expired later. */
 
     /* Create RESTORE payload and generate the protocol to call the command. */
+    /* 取出键的过期时间戳 */
     for (j = 0; j < num_keys; j++) {
         long long ttl = 0;
         long long expireat = getExpire(c->db,kv[j]);
@@ -5477,12 +5516,16 @@ try_again:
 
         serverAssertWithInfo(c,NULL,
             rioWriteBulkCount(&cmd,'*',replace ? 5 : 4));
-
-        if (server.cluster_enabled)
-            serverAssertWithInfo(c,NULL,
-                rioWriteBulkString(&cmd,"RESTORE-ASKING",14));
-        else
-            serverAssertWithInfo(c,NULL,rioWriteBulkString(&cmd,"RESTORE",7));
+        if (server.cluster_enabled) {
+            /* 如果运行在集群模式下，那么发送的命令为 RESTORE-ASKING */
+            serverAssertWithInfo(
+                c, NULL, rioWriteBulkString(&cmd, "RESTORE-ASKING", 14));
+        } else {
+            /* 如果运行在非集群模式下，那么发送的命令为 RESTORE */
+            serverAssertWithInfo(c, NULL,
+                                 rioWriteBulkString(&cmd, "RESTORE", 7));
+        }
+        /* 写入键名和过期时间 */
         serverAssertWithInfo(c,NULL,sdsEncodedObject(kv[j]));
         serverAssertWithInfo(c,NULL,rioWriteBulkString(&cmd,kv[j]->ptr,
                 sdslen(kv[j]->ptr)));
@@ -5490,7 +5533,9 @@ try_again:
 
         /* Emit the payload argument, that is the serialized object using
          * the DUMP format. */
+        /* 将值对象进行序列化 */
         createDumpPayload(&payload,ov[j],kv[j]);
+        /* 写入序列化对象 */
         serverAssertWithInfo(c,NULL,
             rioWriteBulkString(&cmd,payload.io.buffer.ptr,
                                sdslen(payload.io.buffer.ptr)));
@@ -5498,14 +5543,19 @@ try_again:
 
         /* Add the REPLACE option to the RESTORE command if it was specified
          * as a MIGRATE option. */
-        if (replace)
-            serverAssertWithInfo(c,NULL,rioWriteBulkString(&cmd,"REPLACE",7));
+        /* 是否设置了 REPLACE 命令？ */
+        if (replace) {
+            /* 写入 REPLACE 参数 */
+            serverAssertWithInfo(c, NULL,
+                                 rioWriteBulkString(&cmd, "REPLACE", 7));
+        }
     }
 
     /* Fix the actual number of keys we are migrating. */
     num_keys = non_expired;
 
     /* Transfer the query to the other node in 64K chunks. */
+    /*  以 64 kb 每次的大小向对方发送数据 */
     errno = 0;
     {
         sds buf = cmd.io.buffer.ptr;
@@ -5522,7 +5572,7 @@ try_again:
             pos += nwritten;
         }
     }
-
+    /* 读取命令的回复 */
     char buf0[1024]; /* Auth reply. */
     char buf1[1024]; /* Select reply. */
     char buf2[1024]; /* Restore reply. */
@@ -5570,6 +5620,7 @@ try_again:
         } else {
             if (!copy) {
                 /* No COPY option: remove the local key, signal the change. */
+                /* 如果没有指定 COPY 选项，那么删除本机数据库中的键 */
                 dbDelete(c->db,kv[j]);
                 signalModifiedKey(c,c->db,kv[j]);
                 notifyKeyspaceEvent(NOTIFY_GENERIC,"del",kv[j],c->db->id);
@@ -5601,6 +5652,7 @@ try_again:
          * this only for the keys for which we received an acknowledgement
          * from the receiving Redis server, by using the del_idx index. */
         if (del_idx > 1) {
+            /* 如果键被删除了的话，向 AOF 文件和从服务器/节点发送一个 DEL命令 */
             newargv[0] = createStringObject("DEL",3);
             /* Note that the following call takes ownership of newargv. */
             replaceClientCommandVector(c,del_idx,newargv);

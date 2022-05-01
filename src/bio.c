@@ -90,14 +90,14 @@ void *bioProcessBackgroundJobs(void *arg);
  * main thread. */
 #define REDIS_THREAD_STACK_SIZE (1024*1024*4)
 
-/* Initialize the background system, spawning the thread. */
+/* 初始化后台系统，产生线程 */
 void bioInit(void) {
     pthread_attr_t attr;
     pthread_t thread;
     size_t stacksize;
     int j;
 
-    /* Initialization of state vars and objects */
+    /* 状态变量和对象的初始化 */
     for (j = 0; j < BIO_NUM_OPS; j++) {
         pthread_mutex_init(&bio_mutex[j],NULL);
         pthread_cond_init(&bio_newjob_cond[j],NULL);
@@ -127,18 +127,18 @@ void bioInit(void) {
 }
 
 void bioSubmitJob(int type, struct bio_job *job) {
-    job->time = time(NULL);
-    pthread_mutex_lock(&bio_mutex[type]);
-    listAddNodeTail(bio_jobs[type],job);
-    bio_pending[type]++;
-    pthread_cond_signal(&bio_newjob_cond[type]);
-    pthread_mutex_unlock(&bio_mutex[type]);
+    job->time = time(NULL);               /* 任务的时间戳 */
+    pthread_mutex_lock(&bio_mutex[type]); /* 线程互斥锁 */
+    listAddNodeTail(bio_jobs[type], job); /* 最佳任务到对应类型链表的尾部 */
+    bio_pending[type]++;                  /* 标记未处理的数据量 */
+    pthread_cond_signal(&bio_newjob_cond[type]); /* 唤醒一个异步处理线程 */
+    pthread_mutex_unlock(&bio_mutex[type]);      /* 解锁 */
 }
 
+/* 创建一个lazy free的bio任务 */
 void bioCreateLazyFreeJob(lazy_free_fn free_fn, int arg_count, ...) {
     va_list valist;
-    /* Allocate memory for the job structure and all required
-     * arguments */
+    /* 为bio任务结构和所有必需的参数分配内存 */
     struct bio_job *job = zmalloc(sizeof(*job) + sizeof(void *) * (arg_count));
     job->free_fn = free_fn;
 
@@ -164,6 +164,7 @@ void bioCreateFsyncJob(int fd) {
     bioSubmitJob(BIO_AOF_FSYNC, job);
 }
 
+/* bio处理函数 */
 void *bioProcessBackgroundJobs(void *arg) {
     struct bio_job *job;
     unsigned long type = (unsigned long) arg;
@@ -191,10 +192,9 @@ void *bioProcessBackgroundJobs(void *arg) {
     redisSetCpuAffinity(server.bio_cpulist);
 
     makeThreadKillable();
-
+    /* 加互斥锁 */
     pthread_mutex_lock(&bio_mutex[type]);
-    /* Block SIGALRM so we are sure that only the main thread will
-     * receive the watchdog signal. */
+    /* 阻塞 SIGALRM 信号量，这样只有主线程能收到看门狗信号. */
     sigemptyset(&sigset);
     sigaddset(&sigset, SIGALRM);
     if (pthread_sigmask(SIG_BLOCK, &sigset, NULL))
@@ -204,19 +204,18 @@ void *bioProcessBackgroundJobs(void *arg) {
     while(1) {
         listNode *ln;
 
-        /* The loop always starts with the lock hold. */
+        /* 循环始终以锁定保持开始，链表为空，继续等待 */
         if (listLength(bio_jobs[type]) == 0) {
             pthread_cond_wait(&bio_newjob_cond[type],&bio_mutex[type]);
             continue;
         }
-        /* Pop the job from the queue. */
+        /* 从队列头部获取任务 */
         ln = listFirst(bio_jobs[type]);
         job = ln->value;
-        /* It is now possible to unlock the background system as we know have
-         * a stand alone job structure to process.*/
+        /* 现在可以解锁后台系统，因为我们知道有一个独立的工作结构来处理 */
         pthread_mutex_unlock(&bio_mutex[type]);
 
-        /* Process the job accordingly to its type. */
+        /* 根据类型处理任务 */
         if (type == BIO_CLOSE_FILE) {
             close(job->fd);
         } else if (type == BIO_AOF_FSYNC) {
@@ -238,19 +237,22 @@ void *bioProcessBackgroundJobs(void *arg) {
                 atomicSet(server.aof_bio_fsync_status,C_OK);
             }
         } else if (type == BIO_LAZY_FREE) {
+            /* lazy free */
             job->free_fn(job->free_args);
         } else {
             serverPanic("Wrong job type in bioProcessBackgroundJobs().");
         }
         zfree(job);
 
-        /* Lock again before reiterating the loop, if there are no longer
-         * jobs to process we'll block again in pthread_cond_wait(). */
+        /* 在重复循环之前再次锁定，如果不再有作业要处理，
+         * 我们将在pthread_cond_wait() 中再次阻塞 */
         pthread_mutex_lock(&bio_mutex[type]);
+        /* 删除任务 */
         listDelNode(bio_jobs[type],ln);
+        /* 任务计数器减1 */
         bio_pending[type]--;
 
-        /* Unblock threads blocked on bioWaitStepOfType() if any. */
+        /* 广播消息，如果有的话，取消阻塞在 bioWaitStepOfType() 上的线程 */
         pthread_cond_broadcast(&bio_step_cond[type]);
     }
 }

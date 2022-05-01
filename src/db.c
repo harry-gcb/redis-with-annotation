@@ -64,22 +64,24 @@ void updateLFU(robj *val) {
     val->lru = (LFUGetTimeInMinutes()<<8) | counter;
 }
 
-/* Low level key lookup API, not actually called directly from commands
- * implementations that should instead rely on lookupKeyRead(),
- * lookupKeyWrite() and lookupKeyReadWithFlags(). */
+/* 低级键查找 API，实际上并不直接从命令实现中调用，而是应该依赖
+ * lookupKeyRead()、lookupKeyWrite() 和 lookupKeyReadWithFlags()。 */
 robj *lookupKey(redisDb *db, robj *key, int flags) {
     dictEntry *de = dictFind(db->dict,key->ptr);
     if (de) {
+        /* 查找dict中，key对应的entry，返回entry中的value对象 */
         robj *val = dictGetVal(de);
 
         /* Update the access time for the ageing algorithm.
          * Don't do it if we have a saving child, as this will trigger
          * a copy on write madness. */
+        /* 没有rdb和aof线程运行，且flag不是LOOKUP_NOTOUCH则根据淘汰策略更新参数
+         */
         if (!hasActiveChildProcess() && !(flags & LOOKUP_NOTOUCH)){
             if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
-                updateLFU(val);
+                updateLFU(val); /* LFU淘汰策略，更新LFU */
             } else {
-                val->lru = LRU_CLOCK();
+                val->lru = LRU_CLOCK(); /* LRU淘汰策略，更新LRU */
             }
         }
         return val;
@@ -127,7 +129,9 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
 robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags) {
     robj *val;
 
-    /* 检查key是否已经过期 */
+    /* 检查key是否已经过期，如果已过期的话，那么将它删除
+     * 可以避免处理过期的键
+     */
     if (expireIfNeeded(db,key) == 1) {
         /* If we are in the context of a master, expireIfNeeded() returns 1
          * when the key is no longer valid, so we can return NULL ASAP. */
@@ -154,6 +158,7 @@ robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags) {
             goto keymiss;
         }
     }
+    /* 这里获取的是value对象，而非key对象 */
     val = lookupKey(db,key,flags);
     if (val == NULL)
         goto keymiss;
@@ -179,19 +184,25 @@ robj *lookupKeyRead(redisDb *db, robj *key) {
     return lookupKeyReadWithFlags(db,key,LOOKUP_NONE);
 }
 
-/* Lookup a key for write operations, and as a side effect, if needed, expires
- * the key if its TTL is reached.
- *
- * Returns the linked value object if the key exists or NULL if the key
- * does not exist in the specified DB. */
+/* 查找用于写操作的键，如果键达到TTL时间，使键过期
+ * 如果键存在，则返回链接的值对象；如果指定的 DB 中不存在键，则返回 NULL.
+ * */
 robj *lookupKeyWriteWithFlags(redisDb *db, robj *key, int flags) {
-    expireIfNeeded(db,key);
-    return lookupKey(db,key,flags);
+    /* 删除过期键 */
+    expireIfNeeded(db, key);
+    /* 查找并返回 key 的值对象 */
+    return lookupKey(db, key, flags);
 }
 
+/* 为执行写入操作而取出键 key 在数据库 db 中的值
+ * 和 lookupKeyRead 不同，这个函数会更新服务器的命中/不命中信息
+ * 找到时返回值对象，没找到返回 NULL
+ */
 robj *lookupKeyWrite(redisDb *db, robj *key) {
+    /* 查找并返回 key 的值对象 */
     return lookupKeyWriteWithFlags(db, key, LOOKUP_NONE);
 }
+/* 返回key不存在的响应给client */
 void SentReplyOnKeyMiss(client *c, robj *reply){
     serverAssert(sdsEncodedObject(reply));
     sds rep = reply->ptr;
@@ -298,55 +309,58 @@ void setKey(client *c, redisDb *db, robj *key, robj *val) {
     genericSetKey(c,db,key,val,0,1);
 }
 
-/* Return a random key, in form of a Redis object.
- * If there are no keys, NULL is returned.
+/* 随机从数据库中取出一个键，并以字符串对象的方式返回这个键
+ * 如果数据库为空，那么返回 NULL
  *
- * The function makes sure to return keys not already expired. */
+ * 这个函数保证被返回的键都是未过期的 */
 robj *dbRandomKey(redisDb *db) {
     dictEntry *de;
     int maxtries = 100;
+    /* 数据库键数量与过期数量一致，每个键都有个过期时间？ */
     int allvolatile = dictSize(db->dict) == dictSize(db->expires);
 
     while(1) {
         sds key;
         robj *keyobj;
-
+        /* 从键空间中随机取出一个键节点 */
         de = dictGetFairRandomKey(db->dict);
+        /* 数据库为空 */
         if (de == NULL) return NULL;
-
+        /* 取出键 */
         key = dictGetKey(de);
+        /* 为键创建一个字符串对象，对象的值为键的名字 */
         keyobj = createStringObject(key,sdslen(key));
+        /* 检查键是否带有过期时间 */
         if (dictFind(db->expires,key)) {
             if (allvolatile && server.masterhost && --maxtries == 0) {
-                /* If the DB is composed only of keys with an expire set,
-                 * it could happen that all the keys are already logically
-                 * expired in the slave, so the function cannot stop because
-                 * expireIfNeeded() is false, nor it can stop because
-                 * dictGetRandomKey() returns NULL (there are keys to return).
-                 * To prevent the infinite loop we do some tries, but if there
-                 * are the conditions for an infinite loop, eventually we
-                 * return a key name that may be already expired. */
+                /* 如果数据库仅由设置了过期的键组成，则可能会发生所有键在从属服务器中已经在逻辑上过期，因此函数无法停止，
+                 * 因为 expireIfNeeded() 为假，也无法停止，
+                 * 因为 dictGetRandomKey() 返回不为 NULL （有返回键）。
+                 * 为了防止无限循环，我们做了一些尝试，但是如果有无限循环的条件，最终我们会返回一个可能已经过期的键名。
+                 */
                 return keyobj;
             }
+            /* 如果键已经过期，那么将它删除，并继续随机下个键 */
             if (expireIfNeeded(db,keyobj)) {
                 decrRefCount(keyobj);
                 continue; /* search for another key. This expired. */
             }
         }
+        /* 返回被随机到的键（的名字） */
         return keyobj;
     }
 }
 
-/* Delete a key, value, and associated expiration entry if any, from the DB */
+/* 从数据库中删除键、值和关联的过期条目（如果有） */
 int dbSyncDelete(redisDb *db, robj *key) {
-    /* Deleting an entry from the expires dict will not free the sds of
-     * the key, because it is shared with the main dictionary. */
+    /* 从 expires 字典中删除条目不会释放 key 的 sds，因为它与主字典共享。 */
     if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
     dictEntry *de = dictUnlink(db->dict,key->ptr);
     if (de) {
         robj *val = dictGetVal(de);
-        /* Tells the module that the key has been unlinked from the database. */
+        /* 告诉模块key已从数据库中移除了 */
         moduleNotifyKeyUnlink(key,val);
+        /* 释放节点数据 */
         dictFreeUnlinkedEntry(db->dict,de);
         if (server.cluster_enabled) slotToKeyDel(key->ptr);
         return 1;
@@ -704,42 +718,53 @@ void flushallCommand(client *c) {
     addReply(c,shared.ok);
 }
 
-/* This command implements DEL and LAZYDEL. */
+/* 此命令实现 DEL 和 LAZYDEL. */
 void delGenericCommand(client *c, int lazy) {
     int numdel = 0, j;
 
+    /* 遍历所有输入键 */
     for (j = 1; j < c->argc; j++) {
+        /* 先删除过期的键 */
         expireIfNeeded(c->db,c->argv[j]);
         int deleted  = lazy ? dbAsyncDelete(c->db,c->argv[j]) :
                               dbSyncDelete(c->db,c->argv[j]);
         if (deleted) {
+            /* 删除键成功，发送通知 */
             signalModifiedKey(c,c->db,c->argv[j]);
             notifyKeyspaceEvent(NOTIFY_GENERIC,
                 "del",c->argv[j],c->db->id);
             server.dirty++;
+            /* 成功删除，增加 deleted 计数器的值 */
             numdel++;
         }
     }
     addReplyLongLong(c,numdel);
 }
 
+/* 以阻塞方式删除key */
 void delCommand(client *c) {
+    /* del调用函数delGenericCommand，再循环调用dbSyncDelete函数，
+     * 同步删除key、value、过期字典里对应的key（如果有），
+     * 如果是集群还会删除key与slot（槽位）的对应关系 */
     delGenericCommand(c,server.lazyfree_lazy_user_del);
 }
 
+/* 以非阻塞方式删除key */
 void unlinkCommand(client *c) {
     delGenericCommand(c,1);
 }
 
 /* EXISTS key1 key2 ... key_N.
  * Return value is the number of keys existing. */
+/* 检查键是否存在，返回存在的键的数量 */
 void existsCommand(client *c) {
     long long count = 0;
     int j;
-
+    /* 遍历参数，检查键是否存在 */
     for (j = 1; j < c->argc; j++) {
         if (lookupKeyReadWithFlags(c->db,c->argv[j],LOOKUP_NOTOUCH)) count++;
     }
+    /* 返回存在的键的数量 */
     addReplyLongLong(c,count);
 }
 
@@ -760,9 +785,10 @@ void selectCommand(client *c) {
     }
 }
 
+/* 当前数据库中随机返回一个尚未过期的key */
 void randomkeyCommand(client *c) {
     robj *key;
-
+    /* 随机返回键 */
     if ((key = dbRandomKey(c->db)) == NULL) {
         addReplyNull(c);
         return;
@@ -772,22 +798,29 @@ void randomkeyCommand(client *c) {
     decrRefCount(key);
 }
 
+/* 匹配合适的key并一次性返回，如果匹配的键较多，
+ * 则可能阻塞服务器，因此该命令一般禁止在线上使用
+ */
 void keysCommand(client *c) {
     dictIterator *di;
     dictEntry *de;
+    /* 查找模式 */
     sds pattern = c->argv[1]->ptr;
     int plen = sdslen(pattern), allkeys;
     unsigned long numkeys = 0;
     void *replylen = addReplyDeferredLen(c);
 
+    /* 遍历整个数据库，返回（名字）和模式匹配的键 */
     di = dictGetSafeIterator(c->db->dict);
     allkeys = (pattern[0] == '*' && plen == 1);
     while((de = dictNext(di)) != NULL) {
         sds key = dictGetKey(de);
         robj *keyobj;
-
+        /* 将键名和查找模式进行比对 */
         if (allkeys || stringmatchlen(pattern,plen,key,sdslen(key),0)) {
+            /* 创建一个保存键名字的字符串对象 */
             keyobj = createStringObject(key,sdslen(key));
+            /* 键是否已过期 */
             if (!keyIsExpired(c->db,keyobj)) {
                 addReplyBulk(c,keyobj);
                 numkeys++;
@@ -795,6 +828,7 @@ void keysCommand(client *c) {
             decrRefCount(keyobj);
         }
     }
+    /* 释放迭代器 */
     dictReleaseIterator(di);
     setDeferredArrayLen(c,replylen,numkeys);
 }
@@ -850,16 +884,25 @@ int parseScanCursorOrReply(client *c, robj *o, unsigned long *cursor) {
 }
 
 /* This command implements SCAN, HSCAN and SSCAN commands.
- * If object 'o' is passed, then it must be a Hash, Set or Zset object, otherwise
- * if 'o' is NULL the command will operate on the dictionary associated with
- * the current database.
+ * If object 'o' is passed, then it must be a Hash, Set or Zset object,
+ * otherwise if 'o' is NULL the command will operate on the dictionary
+ * associated with the current database.
  *
  * When 'o' is not NULL the function assumes that the first argument in
  * the client arguments vector is a key so it skips it before iterating
  * in order to parse options.
  *
  * In the case of a Hash object the function returns both the field and value
- * of every element on the Hash. */
+ * of every element on the Hash.
+ *
+ * 如果给定了对象 o ，那么它必须是一个哈希对象或者集合对象，
+ * 如果 o 为 NULL 的话，函数将使用当前数据库作为迭代对象。
+ *
+ * 如果参数 o 不为 NULL ，那么说明它是一个键对象，函数将跳过这些键对象，
+ * 对给定的命令选项进行分析（parse）
+ *
+ * 如果被迭代的是哈希对象，那么函数返回的是键值对。
+ * */
 void scanGenericCommand(client *c, robj *o, unsigned long cursor) {
     int i, j;
     list *keys = listCreate();
@@ -870,18 +913,25 @@ void scanGenericCommand(client *c, robj *o, unsigned long cursor) {
     int patlen = 0, use_pattern = 0;
     dict *ht;
 
-    /* Object must be NULL (to iterate keys names), or the type of the object
-     * must be Set, Sorted Set, or Hash. */
+    /* 输入类型检查
+     * Object 必须为 NULL（以迭代键名），或者对象的类型必须是 Set、Sorted Set 或
+     * Hash */
     serverAssert(o == NULL || o->type == OBJ_SET || o->type == OBJ_HASH ||
                 o->type == OBJ_ZSET);
 
-    /* Set i to the first option argument. The previous one is the cursor. */
+    /* 将 i 设置为第一个选项参数。 前一个是光标
+     * 设置第一个选项参数的索引位置
+     * 0    1      2      3
+     * SCAN OPTION <op_arg>         SCAN 命令的选项值从索引 2 开始
+     * HSCAN <key> OPTION <op_arg>  而其他 *SCAN 命令的选项值从索引 3 开始
+     */
     i = (o == NULL) ? 2 : 3; /* Skip the key argument if needed. */
 
-    /* Step 1: Parse options. */
+    /* 解析选项参数 */
     while (i < c->argc) {
         j = c->argc - i;
         if (!strcasecmp(c->argv[i]->ptr, "count") && j >= 2) {
+            /* COUNT <number> */
             if (getLongFromObjectOrReply(c, c->argv[i+1], &count, NULL)
                 != C_OK)
             {
@@ -895,19 +945,20 @@ void scanGenericCommand(client *c, robj *o, unsigned long cursor) {
 
             i += 2;
         } else if (!strcasecmp(c->argv[i]->ptr, "match") && j >= 2) {
+            /* MATCH <pattern> */
             pat = c->argv[i+1]->ptr;
             patlen = sdslen(pat);
 
-            /* The pattern always matches if it is exactly "*", so it is
-             * equivalent to disabling it. */
+            /* 如果模式正好是“*”，则该模式始终匹配，因此相当于禁用它 */
             use_pattern = !(pat[0] == '*' && patlen == 1);
 
             i += 2;
         } else if (!strcasecmp(c->argv[i]->ptr, "type") && o == NULL && j >= 2) {
-            /* SCAN for a particular type only applies to the db dict */
+            /* 特定类型的 SCAN 仅适用于 db dict */
             typename = c->argv[i+1]->ptr;
             i+= 2;
         } else {
+            /* error */
             addReplyErrorObject(c,shared.syntaxerr);
             goto cleanup;
         }
@@ -921,21 +972,28 @@ void scanGenericCommand(client *c, robj *o, unsigned long cursor) {
      * just return everything inside the object in a single call, setting the
      * cursor to zero to signal the end of the iteration. */
 
-    /* Handle the case of a hash table. */
+    /*
+     * 开始迭代集合，如果key保存为ziplist或者intset，则一次性返回所有数据，游标为0
+     *（scan命令的游标参数为0时表示新一轮迭代开始，命令返回的游标值为0时表示迭代结束）
+     * 由于Redis设计只有数据量比较小的时候才会保存为ziplist或者intset，所以此处不会影响性能
+     */
+
+    /* 处理哈希表的情况 */
     ht = NULL;
     if (o == NULL) {
-        ht = c->db->dict;
+        ht = c->db->dict; /* 迭代目标为数据库 */
     } else if (o->type == OBJ_SET && o->encoding == OBJ_ENCODING_HT) {
-        ht = o->ptr;
+        ht = o->ptr; /* 迭代目标为 HT 编码的集合 */
     } else if (o->type == OBJ_HASH && o->encoding == OBJ_ENCODING_HT) {
-        ht = o->ptr;
-        count *= 2; /* We return key / value for this type. */
+        ht = o->ptr; /* 迭代目标为 HT 编码的哈希 */
+        count *= 2;  /* 我们返回此类型的键/值 */
     } else if (o->type == OBJ_ZSET && o->encoding == OBJ_ENCODING_SKIPLIST) {
         zset *zs = o->ptr;
-        ht = zs->dict;
-        count *= 2; /* We return key / value for this type. */
+        ht = zs->dict; /* 迭代目标为 HT 编码的跳跃表 */
+        count *= 2;    /* 我们返回此类型的键/值 */
     }
 
+    /* 游标在保存为Hash的时候发挥作用，具体入口函数为dictScan */
     if (ht) {
         void *privdata[2];
         /* We set the max number of iterations to ten times the specified
@@ -979,7 +1037,8 @@ void scanGenericCommand(client *c, robj *o, unsigned long cursor) {
         serverPanic("Not handled encoding in SCAN.");
     }
 
-    /* Step 3: Filter elements. */
+    /* 根据match参数过滤返回值，并且如果这个键已经过期也会直接过滤掉
+     *（Redis中键过期之后并不会立即删除） */
     node = listFirst(keys);
     while (node) {
         robj *kobj = listNodeValue(node);
@@ -1033,7 +1092,7 @@ void scanGenericCommand(client *c, robj *o, unsigned long cursor) {
         node = nextnode;
     }
 
-    /* Step 4: Reply to the client. */
+    /* 返回结果到客户端，是一个数组，第1个值是游标，第2个值是具体的键值对 */
     addReplyArrayLen(c, 2);
     addReplyBulkLongLong(c,cursor);
 
@@ -1050,10 +1109,12 @@ cleanup:
     listRelease(keys);
 }
 
-/* The SCAN command completely relies on scanGenericCommand. */
+/* SCAN 命令完全依赖于 scanGenericCommand */
 void scanCommand(client *c) {
     unsigned long cursor;
+    /* 解析命令行游标参数 */
     if (parseScanCursorOrReply(c,c->argv[1],&cursor) == C_ERR) return;
+    /* scan、sscan、hscan、zscan 统一入口函数 */
     scanGenericCommand(c,NULL,cursor);
 }
 
@@ -1065,6 +1126,7 @@ void lastsaveCommand(client *c) {
     addReplyLongLong(c,server.lastsave);
 }
 
+/* 获取对象type属性的名称 */
 char* getObjectTypeName(robj *o) {
     char* type;
     if (o == NULL) {
@@ -1087,8 +1149,10 @@ char* getObjectTypeName(robj *o) {
     return type;
 }
 
+/* type命令接口 */
 void typeCommand(client *c) {
     robj *o;
+    /* 查找key对应的值对象，且不改变lru属性 */
     o = lookupKeyReadWithFlags(c->db,c->argv[1],LOOKUP_NOTOUCH);
     addReplyStatus(c, getObjectTypeName(o));
 }
@@ -1118,21 +1182,27 @@ void renameGenericCommand(client *c, int nx) {
     long long expire;
     int samekey = 0;
 
-    /* When source and dest key is the same, no operation is performed,
-     * if the key exists, however we still return an error on unexisting key. */
+    /* 当 source 和 dest key 相同时，不执行任何操作，
+     * 如果 key 不存在，但我们仍然返回 unexisting key 的错误。 */
     if (sdscmp(c->argv[1]->ptr,c->argv[2]->ptr) == 0) samekey = 1;
 
+    /* 查找键是否存在，如果不存在，则返回 ERR no such key */
     if ((o = lookupKeyWriteOrReply(c,c->argv[1],shared.nokeyerr)) == NULL)
         return;
-
+    /* 来源键和目标键不能相同 */
     if (samekey) {
         addReply(c,nx ? shared.czero : shared.ok);
         return;
     }
-
+    /* 增加引用计数，因为后面目标键也会引用这个对象
+     * 如果不增加的话，当来源键被删除时，这个值对象也会被删除
+     */
     incrRefCount(o);
+    /* 取出来源键的过期时间 */
     expire = getExpire(c->db,c->argv[1]);
+    /* 检查目标键是否存在 */
     if (lookupKeyWrite(c->db,c->argv[2]) != NULL) {
+        /* 如果目标键存在，并且执行的是 RENAMENX ，那么直接返回 */
         if (nx) {
             decrRefCount(o);
             addReply(c,shared.czero);
@@ -1140,10 +1210,14 @@ void renameGenericCommand(client *c, int nx) {
         }
         /* Overwrite: delete the old key before creating the new one
          * with the same name. */
+        /* 如果执行的是 RENAME ，那么删除已有的目标键 */
         dbDelete(c->db,c->argv[2]);
     }
+    /* 将来源键的值对象和目标键进行关联 */
     dbAdd(c->db,c->argv[2],o);
+    /* 如果有过期时间，那么为目标键设置过期时间 */
     if (expire != -1) setExpire(c,c->db,c->argv[2],expire);
+    /* 删除来源键 */
     dbDelete(c->db,c->argv[1]);
     signalModifiedKey(c,c->db,c->argv[1]);
     signalModifiedKey(c,c->db,c->argv[2]);
@@ -1155,64 +1229,73 @@ void renameGenericCommand(client *c, int nx) {
     addReply(c,nx ? shared.cone : shared.ok);
 }
 
+/* 重命名键 */
 void renameCommand(client *c) {
     renameGenericCommand(c,0);
 }
 
+/* 重命名键 */
 void renamenxCommand(client *c) {
     renameGenericCommand(c,1);
 }
 
+/* 将key移动到另一个数据库 */
 void moveCommand(client *c) {
     robj *o;
     redisDb *src, *dst;
     int srcid, dbid;
     long long expire;
-
+    /* move命令不可用于集群模式 */
     if (server.cluster_enabled) {
         addReplyError(c,"MOVE is not allowed in cluster mode");
         return;
     }
 
-    /* Obtain source and target DB pointers */
+    /* 源数据库 */
     src = c->db;
+    /* 源数据库id */
     srcid = c->db->id;
-
+    /* 由参数中获取目标数据库id */
     if (getIntFromObjectOrReply(c, c->argv[2], &dbid, NULL) != C_OK)
         return;
-
+    /* 切换到目标数据库 */
     if (selectDb(c,dbid) == C_ERR) {
         addReplyError(c,"DB index is out of range");
         return;
     }
+    /* 目标数据库 */
     dst = c->db;
+    /* 切回源数据库 */
     selectDb(c,srcid); /* Back to the source DB */
 
-    /* If the user is moving using as target the same
-     * DB as the source DB it is probably an error. */
+    /* 如果源数据库和目标数据库相等，那么返回错误 */
     if (src == dst) {
         addReplyErrorObject(c,shared.sameobjecterr);
         return;
     }
 
-    /* Check if the element exists and get a reference */
+    /* 检查并取出要移动的对象 */
     o = lookupKeyWrite(c->db,c->argv[1]);
     if (!o) {
         addReply(c,shared.czero);
         return;
     }
+    /* 获取超时时间 */
     expire = getExpire(c->db,c->argv[1]);
 
-    /* Return zero if the key already exists in the target DB */
+    /* 如果键已经存在于目标数据库，那么返回 */
     if (lookupKeyWrite(dst,c->argv[1]) != NULL) {
         addReply(c,shared.czero);
         return;
     }
+    /* 将键添加到目标数据库中 */
     dbAdd(dst,c->argv[1],o);
+    /* 如果key存在expire，目标数据库expire字典中添加key */
     if (expire != -1) setExpire(c,dst,c->argv[1],expire);
+    /* 增加引用计数，避免接下来源数据库中删除时 o 被清理 */
     incrRefCount(o);
 
-    /* OK! key moved, free the entry in the source DB */
+    /* 将键从源数据库中删除 */
     dbDelete(src,c->argv[1]);
     signalModifiedKey(c,src,c->argv[1]);
     signalModifiedKey(c,dst,c->argv[1]);
@@ -1423,11 +1506,15 @@ void swapdbCommand(client *c) {
 /*-----------------------------------------------------------------------------
  * Expires API
  *----------------------------------------------------------------------------*/
-
+/*
+ * 移除键 key 的过期时间
+ */
 int removeExpire(redisDb *db, robj *key) {
     /* An expire may only be removed if there is a corresponding entry in the
      * main dict. Otherwise, the key will never be freed. */
+    /* 确保键存在 */
     serverAssertWithInfo(NULL,key,dictFind(db->dict,key->ptr) != NULL);
+    /* 删除过期时间 */
     return dictDelete(db->expires,key->ptr) == DICT_OK;
 }
 
@@ -1435,13 +1522,18 @@ int removeExpire(redisDb *db, robj *key) {
  * of an user calling a command 'c' is the client, otherwise 'c' is set
  * to NULL. The 'when' parameter is the absolute unix time in milliseconds
  * after which the key will no longer be considered valid. */
+/* 将键 key 的过期时间设为 when */
 void setExpire(client *c, redisDb *db, robj *key, long long when) {
     dictEntry *kde, *de;
 
     /* Reuse the sds from the main dict in the expire dict */
+    /* 从数据库中查找key */
     kde = dictFind(db->dict,key->ptr);
     serverAssertWithInfo(NULL,key,kde != NULL);
+    /* 查找或者添加key节点到过期字典 */
     de = dictAddOrFind(db->expires,dictGetKey(kde));
+    /* 设置键的过期时间，这里是直接使用整数值来保存过期时间，
+     * 不是用 INT 编码的String 对象*/
     dictSetSignedIntegerVal(de,when);
 
     int writable_slave = server.masterhost && server.repl_slave_ro == 0;
@@ -1564,7 +1656,17 @@ int keyIsExpired(redisDb *db, robj *key) {
  *
  * The return value of the function is 0 if the key is still valid,
  * otherwise the function returns 1 if the key is expired. */
+
+/*
+ * 检查 key 是否已经过期，如果是的话，将它从数据库中删除。
+ *
+ * 返回 0 表示键没有过期时间，或者键未过期。
+ *
+ * 返回 1 表示键已经因为过期而被删除了。
+ */
+
 int expireIfNeeded(redisDb *db, robj *key) {
+    /* 查询键是否已过期 */
     if (!keyIsExpired(db,key)) return 0;
 
     /* If we are running in the context of a slave, instead of
@@ -1575,6 +1677,11 @@ int expireIfNeeded(redisDb *db, robj *key) {
      * Still we try to return the right information to the caller,
      * that is, 0 if we think the key should be still valid, 1 if
      * we think the key is expired at this time. */
+    /* 当服务器运行在 replication 模式时，附属节点并不主动删除 key
+     * 它只返回一个逻辑上正确的返回值，
+     * 真正的删除操作要等待主节点发来删除命令时才执行
+     * 从而保证数据的同步
+     */
     if (server.masterhost != NULL) return 1;
 
     /* If clients are paused, we keep the current dataset constant,
@@ -1584,6 +1691,7 @@ int expireIfNeeded(redisDb *db, robj *key) {
     if (checkClientPauseTimeoutAndReturnIfPaused()) return 1;
 
     /* Delete the key */
+    /* 将过期键从数据库中删除 */
     deleteExpiredKeyAndPropagate(db,key);
     return 1;
 }

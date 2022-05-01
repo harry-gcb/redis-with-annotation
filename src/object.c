@@ -703,6 +703,14 @@ int getLongLongFromObject(robj *o, long long *target) {
     return C_OK;
 }
 
+/*
+ * 尝试从对象 o 中取出 long long 类型值，
+ * 或者尝试将对象 o 中的值转换为 long long 类型值，
+ * 并将这个得出的整数值保存到 *target 。
+ *
+ * 如果取出/转换成功的话，返回 REDIS_OK 。
+ * 否则，返回 REDIS_ERR ，并向客户端发送一条 msg 出错回复。
+ */
 int getLongLongFromObjectOrReply(client *c, robj *o, long long *target, const char *msg) {
     long long value;
     if (getLongLongFromObject(o, &value) != C_OK) {
@@ -1243,23 +1251,28 @@ int objectSetLRUOrLFU(robj *val, long long lfu_freq, long long lru_idle,
 
 /* ======================= The OBJECT and MEMORY commands =================== */
 
-/* This is a helper function for the OBJECT command. We need to lookup keys
- * without any modification of LRU or other parameters. */
+/* 这是 OBJECT 命令的辅助函数。 我们需要在不修改 LRU 或其他参数的情况下查找键。
+ */
 robj *objectCommandLookup(client *c, robj *key) {
     return lookupKeyReadWithFlags(c->db,key,LOOKUP_NOTOUCH|LOOKUP_NONOTIFY);
 }
 
+/* 在不修改 LRU 时间的情况下，获取 key 对应的对象。
+ * 如果对象不存在，那么向客户端发送回复 reply
+ */
 robj *objectCommandLookupOrReply(client *c, robj *key, robj *reply) {
     robj *o = objectCommandLookup(c,key);
+    /* 如果对象不存在，返回key miss消息 */
     if (!o) SentReplyOnKeyMiss(c, reply);
     return o;
 }
 
-/* Object command allows to inspect the internals of a Redis Object.
+/* Object 命令允许检查 Redis 对象的内部，即object命令接口
  * Usage: OBJECT <refcount|encoding|idletime|freq> <key> */
 void objectCommand(client *c) {
     robj *o;
 
+    /* object help命令 */
     if (c->argc == 2 && !strcasecmp(c->argv[1]->ptr,"help")) {
         const char *help[] = {
 "ENCODING <key>",
@@ -1278,22 +1291,28 @@ NULL
         };
         addReplyHelp(c, help);
     } else if (!strcasecmp(c->argv[1]->ptr,"refcount") && c->argc == 3) {
+        /* 返回对象的引用计数 */
         if ((o = objectCommandLookupOrReply(c,c->argv[2],shared.null[c->resp]))
                 == NULL) return;
         addReplyLongLong(c,o->refcount);
     } else if (!strcasecmp(c->argv[1]->ptr,"encoding") && c->argc == 3) {
+        /* 返回对象的编码 */
         if ((o = objectCommandLookupOrReply(c,c->argv[2],shared.null[c->resp]))
                 == NULL) return;
         addReplyBulkCString(c,strEncoding(o->encoding));
     } else if (!strcasecmp(c->argv[1]->ptr,"idletime") && c->argc == 3) {
+        /* 返回键的空闲时间 */
         if ((o = objectCommandLookupOrReply(c,c->argv[2],shared.null[c->resp]))
                 == NULL) return;
+        /* 如果内存淘汰策略是LFU，则返回错误 */
         if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
             addReplyError(c,"An LFU maxmemory policy is selected, idle time not tracked. Please note that when switching between policies at runtime LRU and LFU data will take some time to adjust.");
             return;
         }
+        /* 返回空转的毫秒时间 */
         addReplyLongLong(c,estimateObjectIdleTime(o)/1000);
     } else if (!strcasecmp(c->argv[1]->ptr,"freq") && c->argc == 3) {
+        /* 返回键的对数访问频率计数器 */
         if ((o = objectCommandLookupOrReply(c,c->argv[2],shared.null[c->resp]))
                 == NULL) return;
         if (!(server.maxmemory_policy & MAXMEMORY_FLAG_LFU)) {
@@ -1306,6 +1325,7 @@ NULL
          * when the key is read or overwritten. */
         addReplyLongLong(c,LFUDecrAndReturn(o));
     } else {
+        /* 命令语法错误 */
         addReplySubcommandSyntaxError(c);
     }
 }

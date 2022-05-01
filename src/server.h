@@ -524,8 +524,8 @@ typedef enum
  * by a 64 bit module type ID, which has a 54 bits module-specific signature
  * in order to dispatch the loading to the right module, plus a 10 bits
  * encoding version. */
-#define OBJ_MODULE 5 /* Module object. */
-#define OBJ_STREAM 6 /* Stream object. */
+#define OBJ_MODULE 5 /* 模块对象 */
+#define OBJ_STREAM 6 /* 流对象 */
 
 /* Extract encver / signature from a module type ID. */
 #define REDISMODULE_TYPE_ENCVER_BITS 10
@@ -666,17 +666,17 @@ typedef struct RedisModuleDigest
  * internally represented in multiple ways. The 'encoding' field of the object
  * is set to one of this fields for this object. */
 /* 对象编码 */
-#define OBJ_ENCODING_RAW 0        /* Raw representation                     简单动态字符串 */
-#define OBJ_ENCODING_INT 1        /* Encoded as integer                     整数类型 */
-#define OBJ_ENCODING_HT 2         /* Encoded as hash table                  哈希表/字典 */
-#define OBJ_ENCODING_ZIPMAP 3     /* Encoded as zipmap                      zipmap已经废弃 */
-#define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding.     双端链表 已废弃 */
-#define OBJ_ENCODING_ZIPLIST 5    /* Encoded as ziplist                     压缩列表 */
-#define OBJ_ENCODING_INTSET 6     /* Encoded as intset                      整数集合 */
-#define OBJ_ENCODING_SKIPLIST 7   /* Encoded as skiplist                    跳跃表 */
-#define OBJ_ENCODING_EMBSTR 8     /* Embedded sds string encoding           编码的简单动态字符串 */
-#define OBJ_ENCODING_QUICKLIST 9  /* Encoded as linked list of ziplists     由双端链表和压缩列表构成的快速列表 */
-#define OBJ_ENCODING_STREAM 10    /* Encoded as a radix tree of listpacks   列表包的基数树*/
+#define OBJ_ENCODING_RAW 0        /* 简单动态字符串 */
+#define OBJ_ENCODING_INT 1        /* 编码为整数型 */
+#define OBJ_ENCODING_HT 2         /* 编码为散列表 */
+#define OBJ_ENCODING_ZIPMAP 3     /* 编码为zipmap */
+#define OBJ_ENCODING_LINKEDLIST 4 /* 不再使用：旧列表编码 */
+#define OBJ_ENCODING_ZIPLIST 5    /* 编码为压缩列表 */
+#define OBJ_ENCODING_INTSET 6     /* 编码为整数集合合 */
+#define OBJ_ENCODING_SKIPLIST 7   /* 编码为跳表 */
+#define OBJ_ENCODING_EMBSTR 8     /* 编码为简短字符串 */
+#define OBJ_ENCODING_QUICKLIST 9  /* 编码为快速链表 */
+#define OBJ_ENCODING_STREAM 10    /* 编码为listpacks的基数树 */
 /*
 +------------------------------------------------+
 + 对象类型           编码方式
@@ -770,6 +770,7 @@ typedef struct redisDb
     long long avg_ttl; /* Average TTL, just for stats*/
     /* 活动的过期周期的光标。*/
     unsigned long expires_cursor;         /* Cursor of the active expire cycle.*/
+    /* 逐渐尝试逐个碎片整理的key列表 */
     list *defrag_later;           /* List of key names to attempt to defrag one by one, gradually. */
 } redisDb;
 
@@ -1555,7 +1556,9 @@ struct redisServer
     /* Replication (slave) */
     char *masteruser;                   /* AUTH with this user and masterauth with master */
     sds masterauth;                     /* AUTH with this password with master */
-    char *masterhost;                   /* Hostname of master 主服务器的地址*/
+    char *masterhost; /* masterhost字段存储当前Redis服务器的master服务器的域名，
+                       * 如果为NULL说明当前服务器不是某个Redis服务器的slaver
+                       *（master服务器）*/
     int masterport;                     /* Port of master */
     int repl_timeout;                   /* Timeout after N seconds of master idle */
     client *master;                     /* Client that is master for this slave */

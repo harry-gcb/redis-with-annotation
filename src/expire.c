@@ -185,21 +185,30 @@ void activeExpireCycle(int type) {
          * for time limit, unless the percentage of estimated stale keys is
          * too high. Also never repeat a fast cycle for the same period
          * as the fast cycle total duration itself. */
+        /* 上次activeExpireCycle函数是否已经执行完毕
+         * 如果上次函数没有触发timelimit_exit，那么不执行处理
+         */
         if (!timelimit_exit &&
             server.stat_expired_stale_perc < config_cycle_acceptable_stale)
             return;
-
+        /* 当前时间距离上次执行快速过期键删除是否已经超过2000微秒
+         * 如果距离上次执行未够一定时间，那么不执行处理
+         */
         if (start < last_fast_cycle + (long long)config_cycle_fast_duration*2)
             return;
-
+        /* 运行到这里，说明执行快速处理，记录当前时间 */
         last_fast_cycle = start;
     }
 
     /* We usually should test CRON_DBS_PER_CALL per iteration, with
      * two exceptions:
+     * 一般情况下，函数只处理 REDIS_DBCRON_DBS_PER_CALL 个数据库，除非：
      *
      * 1) Don't test more DBs than we have.
+     * 当前数据库的数量小于 REDIS_DBCRON_DBS_PER_CALL
      * 2) If last time we hit the time limit, we want to scan all DBs
+     * 如果上次处理遇到了时间上限，那么这次需要对所有数据库进行扫描，
+     * 这可以避免过多的过期键占用空间
      * in this iteration, as there is work to do in some DB and we don't want
      * expired keys to use memory for too much time. */
     if (dbs_per_call > server.dbnum || timelimit_exit)
@@ -213,11 +222,14 @@ void activeExpireCycle(int type) {
      * 假设server.hz为10，每秒activeExpireCycle执行10次，
      * 那么activeExpireCycle执行时间为
      * (config_cycle_slow_time_perc/100) * (1000000/10)（us）
+     * 即25%~45%的CPU时间
      */
     timelimit = config_cycle_slow_time_perc*1000000/server.hz/100;
     timelimit_exit = 0;
     if (timelimit <= 0) timelimit = 1;
 
+    /* 如果是运行在快速模式之下，那么最多只能运行 config_cycle_fast_duration
+     * 微秒，默认值为1000+250*effort微秒  */
     if (type == ACTIVE_EXPIRE_CYCLE_FAST)
         timelimit = config_cycle_fast_duration; /* in microseconds. */
 
@@ -511,20 +523,16 @@ void flushSlaveKeysWithExpireList(void) {
     }
 }
 
-/* 在载入数据时，或者服务器为附属节点时，
- * 即使 EXPIRE 的 TTL 为负数，或者 EXPIREAT 提供的时间戳已经过期，
- * 服务器也不会主动删除这个键，而是等待主节点发来显式的 DEL 命令。
- *
- * 程序会继续将（一个可能已经过期的 TTL）设置为键的过期时间，
- * 并且等待主节点发来 DEL 命令。
+/* 检查是否过期
  */
 int checkAlreadyExpired(long long when) {
-    /* EXPIRE with negative TTL, or EXPIREAT with a timestamp into the past
-     * should never be executed as a DEL when load the AOF or in the context
-     * of a slave instance.
+    /* 在载入数据时，或者服务器为附属节点时，
+     * 即使 EXPIRE 的 TTL 为负数，或者 EXPIREAT 提供的时间戳已经过期，
+     * 服务器也不会主动删除这个键，而是等待主节点发来显式的 DEL 命令。
      *
-     * Instead we add the already expired key to the database with expire time
-     * (possibly in the past) and wait for an explicit DEL from the master. */
+     * 程序会继续将（一个可能已经过期的 TTL）设置为键的过期时间，
+     * 并且等待主节点发来 DEL 命令。
+     **/
     return (when <= mstime() && !server.loading && !server.masterhost);
 }
 
@@ -562,8 +570,8 @@ void expireGenericCommand(client *c, long long basetime, int unit) {
     }
     when += basetime;
     if (((when < 0) && !negative_when) || ((when-basetime > 0) && negative_when)) {
-        /* EXPIRE allows negative numbers, but we can at least detect an
-         * overflow by either unit conversion or basetime addition. */
+        /* EXPIRE 允许负数，但我们至少可以通过单位转换或基本时间加法来检测溢出
+         */
         addReplyErrorFormat(c, "invalid expire time in %s", c->cmd->name);
         return;
     }
@@ -573,10 +581,10 @@ void expireGenericCommand(client *c, long long basetime, int unit) {
         addReply(c,shared.czero);
         return;
     }
-
+    /* 检查这个时间点是否已经过期 */
     if (checkAlreadyExpired(when)) {
         robj *aux;
-        /* when 提供的时间已经过期，服务器为主节点，并且没在载入数据 */
+        /* when 提供的时间已经过期，根据配置不同有同步和异步删除key */
         int deleted = server.lazyfree_lazy_expire ? dbAsyncDelete(c->db,key) :
                                                     dbSyncDelete(c->db,key);
         serverAssertWithInfo(c,key,deleted);
@@ -590,8 +598,11 @@ void expireGenericCommand(client *c, long long basetime, int unit) {
         addReply(c, shared.cone);
         return;
     } else {
+        /* 设置键的过期时间，向redisDb的expires字典里添加/修改键值对 */
         setExpire(c,c->db,key,when);
         addReply(c,shared.cone);
+        /* 如果服务器为附属节点，或者服务器正在载入，
+         * 那么这个 when 有可能已经过期的 */
         signalModifiedKey(c,c->db,key);
         notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",key,c->db->id);
         server.dirty++;
@@ -599,45 +610,62 @@ void expireGenericCommand(client *c, long long basetime, int unit) {
     }
 }
 
-/* EXPIRE key seconds */
+/* EXPIRE key seconds
+ * 设置key的过期时间，单位秒
+ */
 void expireCommand(client *c) {
     expireGenericCommand(c,mstime(),UNIT_SECONDS);
 }
 
-/* EXPIREAT key time */
+/* EXPIREAT key time
+ * 设置key的过期时间点，单位秒
+ */
 void expireatCommand(client *c) {
     expireGenericCommand(c,0,UNIT_SECONDS);
 }
 
-/* PEXPIRE key milliseconds */
+/* PEXPIRE key milliseconds
+ * 设置key的过期时间，单位毫秒
+ */
 void pexpireCommand(client *c) {
     expireGenericCommand(c,mstime(),UNIT_MILLISECONDS);
 }
 
-/* PEXPIREAT key ms_time */
+/* PEXPIREAT key ms_time
+ * 设置key的过期时间点，单位毫秒
+ */
 void pexpireatCommand(client *c) {
     expireGenericCommand(c,0,UNIT_MILLISECONDS);
 }
 
-/* Implements TTL and PTTL */
+/*
+ * TTL和PTTL命令的实现，返回键的剩余生存时间。
+ * output_ms 指定返回值的格式：
+ * - 为 1 时，返回毫秒
+ * - 为 0 时，返回秒
+ */
 void ttlGenericCommand(client *c, int output_ms) {
     long long expire, ttl = -1;
 
-    /* If the key does not exist at all, return -2 */
+    /* 取出键，如果键不存在，返回-2到client */
     if (lookupKeyReadWithFlags(c->db,c->argv[1],LOOKUP_NOTOUCH) == NULL) {
         addReplyLongLong(c,-2);
         return;
     }
     /* The key exists. Return -1 if it has no expire, or the actual
      * TTL value otherwise. */
+    /* 键值对存在，从过期字典里查找key对应的过期时间 */
     expire = getExpire(c->db,c->argv[1]);
     if (expire != -1) {
+        /* 计算剩余生存时间 */
         ttl = expire-mstime();
         if (ttl < 0) ttl = 0;
     }
     if (ttl == -1) {
+        /* 键是持久的 */
         addReplyLongLong(c,-1);
     } else {
+        /* 返回 TTL，(ttl+500)/1000 计算的是渐近秒数 */
         addReplyLongLong(c,output_ms ? ttl : ((ttl+500)/1000));
     }
 }
@@ -653,24 +681,34 @@ void pttlCommand(client *c) {
 }
 
 /* PERSIST key */
+/* 删除键过期时间 */
 void persistCommand(client *c) {
-    if (lookupKeyWrite(c->db,c->argv[1])) {
-        if (removeExpire(c->db,c->argv[1])) {
+    /* 调用lookupKeyWrite函数，在查找前先查询过期字典，
+     * 如果ttl到期则使键过期，如果键存在，则返回键的值对象，
+     * 并从数据库的过期字典中删除指定key的对象
+     */
+    if (lookupKeyWrite(c->db, c->argv[1])) { /* 为写操作查找key对象 */
+        /* 键带有过期时间，那么将它移除 */
+        if (removeExpire(c->db, c->argv[1])) {
             signalModifiedKey(c,c->db,c->argv[1]);
             notifyKeyspaceEvent(NOTIFY_GENERIC,"persist",c->argv[1],c->db->id);
             addReply(c,shared.cone);
             server.dirty++;
         } else {
+            /* 键已经是持久的了 */
             addReply(c,shared.czero);
         }
     } else {
+        /* 键没有过期时间 */
         addReply(c,shared.czero);
     }
 }
 
 /* TOUCH key1 [key2 key3 ... keyN] */
+/* 改变key的最后访问时间。如果key不存在，则忽略该key。返回成功修改的数量 */
 void touchCommand(client *c) {
     int touched = 0;
+    /* 遍历参数列表，更新key的最后访问时间 */
     for (int j = 1; j < c->argc; j++)
         if (lookupKeyRead(c->db,c->argv[j]) != NULL) touched++;
     addReplyLongLong(c,touched);
