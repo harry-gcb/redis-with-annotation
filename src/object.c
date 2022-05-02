@@ -440,6 +440,7 @@ void trimStringObjectIfNeeded(robj *o) {
 }
 
 /* Try to encode a string object in order to save space */
+/* 尝试对字符串对象进行编码，以节约内存 */
 robj *tryObjectEncoding(robj *o) {
     long value;
     sds s = o->ptr;
@@ -454,16 +455,21 @@ robj *tryObjectEncoding(robj *o) {
     /* We try some specialized encoding only for objects that are
      * RAW or EMBSTR encoded, in other words objects that are still
      * in represented by an actually array of chars. */
+    /* 只在字符串的编码为 RAW 或者 EMBSTR 时尝试进行编码 */
     if (!sdsEncodedObject(o)) return o;
 
     /* It's not safe to encode shared objects: shared objects can be shared
      * everywhere in the "object space" of Redis and may end in places where
      * they are not handled. We handle them only as values in the keyspace. */
-     if (o->refcount > 1) return o;
+    /* 不对共享对象进行编码 */
+    if (o->refcount > 1) return o;
 
     /* Check if we can represent this string as a long integer.
      * Note that we are sure that a string larger than 20 chars is not
      * representable as a 32 nor 64 bit integer. */
+    /* 对字符串进行检查
+     * 只对长度小于或等于 21 字节，并且可以被解释为整数的字符串进行编码
+     */
     len = sdslen(s);
     if (len <= 20 && string2l(s,len,&value)) {
         /* This object is encodable as a long. Try to use a shared object.
@@ -475,10 +481,16 @@ robj *tryObjectEncoding(robj *o) {
             value >= 0 &&
             value < OBJ_SHARED_INTEGERS)
         {
+            /* 如果Redis的配置不要求运行LRU或LFU 淘汰算法，
+             * 并且转换后的value值小于OBJ_SHARED_INTEGERS，那么会返回共享数字对象
+             * 淘汰算法要求每个robj有不同的lru字段值
+             */
             decrRefCount(o);
             incrRefCount(shared.integers[value]);
             return shared.integers[value];
         } else {
+            /* 如果不能返回共享对象，那么将原来的robj的encoding改为OBJ_ENCODING_INT
+             */
             if (o->encoding == OBJ_ENCODING_RAW) {
                 sdsfree(o->ptr);
                 o->encoding = OBJ_ENCODING_INT;
@@ -495,6 +507,8 @@ robj *tryObjectEncoding(robj *o) {
      * try the EMBSTR encoding which is more efficient.
      * In this representation the object and the SDS string are allocated
      * in the same chunk of memory to save space and cache misses. */
+    /* 不能转成64位long的字符串最后再做两步处理
+     * 尝试将 RAW 编码的字符串编码为 EMBSTR 编码 */
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT) {
         robj *emb;
 
@@ -513,6 +527,7 @@ robj *tryObjectEncoding(robj *o) {
      * We do that only for relatively large strings as this branch
      * is only entered if the length of the string is greater than
      * OBJ_ENCODING_EMBSTR_SIZE_LIMIT. */
+    /* 这个对象没办法进行编码，尝试从 SDS 中移除所有空余空间 */
     trimStringObjectIfNeeded(o);
 
     /* Return the original object. */

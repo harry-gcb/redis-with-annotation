@@ -293,18 +293,31 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
  * All the new keys in the database should be created via this interface.
  * The client 'c' argument may be set to NULL if the operation is performed
  * in a context where there is no clear client performing the operation. */
+
+/*
+ * 高层次的 SET 操作函数。
+ *
+ * 这个函数可以在不管键 key 是否存在的情况下，将它和 val 关联起来。
+ *    值对象的引用计数会被增加
+ *    监视键 key 的客户端会收到键已经被修改的通知
+ *    键的过期时间会被移除（键变为持久的）
+ */
+
 void genericSetKey(client *c, redisDb *db, robj *key, robj *val, int keepttl, int signal) {
+    /* 添加或覆写数据库中的键值对 */
     if (lookupKeyWrite(db,key) == NULL) {
         dbAdd(db,key,val);
     } else {
         dbOverwrite(db,key,val);
     }
     incrRefCount(val);
+    /* 移除键的过期时间 */
     if (!keepttl) removeExpire(db,key);
+    /* 发送键修改通知 */
     if (signal) signalModifiedKey(c,db,key);
 }
 
-/* Common case for genericSetKey() where the TTL is not retained. */
+/* genericSetKey() 不保留 TTL 的通用case */
 void setKey(client *c, redisDb *db, robj *key, robj *val) {
     genericSetKey(c,db,key,val,0,1);
 }

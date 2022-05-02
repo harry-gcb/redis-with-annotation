@@ -37,7 +37,10 @@ int getGenericCommand(client *c);
 /*-----------------------------------------------------------------------------
  * String Commands
  *----------------------------------------------------------------------------*/
-
+/*
+ * 检查给定字符串长度 len 是否超过限制值 512 MB
+ * 超过返回 REDIS_ERR ，未超过返回 REDIS_OK
+ */
 static int checkStringLength(client *c, long long size) {
     if (!(c->flags & CLIENT_MASTER) && size > server.proto_max_bulk_len) {
         addReplyError(c,"string exceeds maximum allowed size (proto-max-bulk-len)");
@@ -72,20 +75,26 @@ static int checkStringLength(client *c, long long size) {
 #define OBJ_EXAT (1<<6)            /* Set if timestamp in second is given */
 #define OBJ_PXAT (1<<7)            /* Set if timestamp in ms is given */
 #define OBJ_PERSIST (1<<8)         /* Set if we need to remove the ttl */
-
+/* set/get命令接口 */
 void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire, int unit, robj *ok_reply, robj *abort_reply) {
     long long milliseconds = 0, when = 0; /* initialized to avoid any harmness warning */
-
+    /* 取出过期时间 */
     if (expire) {
+        /* 取出 expire 参数的值 */
         if (getLongLongFromObjectOrReply(c, expire, &milliseconds, NULL) != C_OK)
             return;
+        /* expire 参数的值不正确时报错 */
         if (milliseconds <= 0 || (unit == UNIT_SECONDS && milliseconds > LLONG_MAX / 1000)) {
             /* Negative value provided or multiplication is gonna overflow. */
             addReplyErrorFormat(c, "invalid expire time in %s", c->cmd->name);
             return;
         }
+        /* 不论输入的过期时间是秒还是毫秒
+         * Redis 实际都以毫秒的形式保存过期时间
+         * 如果输入的过期时间为秒，那么将它转换为毫秒 */
         if (unit == UNIT_SECONDS) milliseconds *= 1000;
         when = milliseconds;
+        /* 检查过期时间是否可用 */
         if ((flags & OBJ_PX) || (flags & OBJ_EX))
             when += mstime();
         if (when <= 0) {
@@ -94,21 +103,24 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
             return;
         }
     }
-
+    /* 如果设置了 NX 或者 XX 参数，那么检查条件是否符合这两个设置 */
     if ((flags & OBJ_SET_NX && lookupKeyWrite(c->db,key) != NULL) ||
         (flags & OBJ_SET_XX && lookupKeyWrite(c->db,key) == NULL))
     {
         addReply(c, abort_reply ? abort_reply : shared.null[c->resp]);
         return;
     }
-
+    /* 如果有get参数，获取key对应的value字符串 */
     if (flags & OBJ_SET_GET) {
         if (getGenericCommand(c) == C_ERR) return;
     }
-
+    /* 将键值关联到数据库 */
     genericSetKey(c,c->db,key, val,flags & OBJ_KEEPTTL,1);
+    /* 将数据库设为脏 */
     server.dirty++;
+    /* 发送事件通知 */
     notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
+    /* 为键设置过期时间 */
     if (expire) {
         setExpire(c,c->db,key,when);
         notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",key,c->db->id);
@@ -127,11 +139,13 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
         rewriteClientCommandVector(c,5,shared.set,key,val,exp,millisecondObj);
         decrRefCount(millisecondObj);
     }
+    /* 如果没有get参数，直接发送ok结果给client */
     if (!(flags & OBJ_SET_GET)) {
         addReply(c, ok_reply ? ok_reply : shared.ok);
     }
 
-    /* Propagate without the GET argument (Isn't needed if we had expire since in that case we completely re-written the command argv) */
+    /* 不带 GET 参数的响应
+     * 如果我们已经过期则不需要，因为在这种情况下我们完全重写了命令argv */
     if ((flags & OBJ_SET_GET) && !expire) {
         int argc = 0;
         int j;
@@ -170,8 +184,7 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
  * EX/EXAT/PX/PXAT arguments. Unit is updated to millisecond if PX/PXAT is set.
  */
 int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj **expire, int command_type) {
-
-    int j = command_type == COMMAND_GET ? 2 : 3;
+    int j = command_type == COMMAND_GET ? 2 : 3; /* set命令3个必要参数 */
     for (; j < c->argc; j++) {
         char *opt = c->argv[j]->ptr;
         robj *next = (j == c->argc-1) ? NULL : c->argv[j+1];
@@ -180,7 +193,7 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
             (opt[1] == 'x' || opt[1] == 'X') && opt[2] == '\0' &&
             !(*flags & OBJ_SET_XX) && !(*flags & OBJ_SET_GET) && (command_type == COMMAND_SET))
         {
-            *flags |= OBJ_SET_NX;
+            *flags |= OBJ_SET_NX; /* nx/NX选项 */
         } else if ((opt[0] == 'x' || opt[0] == 'X') &&
                    (opt[1] == 'x' || opt[1] == 'X') && opt[2] == '\0' &&
                    !(*flags & OBJ_SET_NX) && (command_type == COMMAND_SET))
@@ -191,12 +204,12 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
                    (opt[2] == 't' || opt[2] == 'T') && opt[3] == '\0' &&
                    !(*flags & OBJ_SET_NX) && (command_type == COMMAND_SET))
         {
-            *flags |= OBJ_SET_GET;
+            *flags |= OBJ_SET_GET; /* get/GET选项 */
         } else if (!strcasecmp(opt, "KEEPTTL") && !(*flags & OBJ_PERSIST) &&
             !(*flags & OBJ_EX) && !(*flags & OBJ_EXAT) &&
             !(*flags & OBJ_PX) && !(*flags & OBJ_PXAT) && (command_type == COMMAND_SET))
         {
-            *flags |= OBJ_KEEPTTL;
+            *flags |= OBJ_KEEPTTL; /* KEEPTTL 选项 */
         } else if (!strcasecmp(opt,"PERSIST") && (command_type == COMMAND_GET) &&
                !(*flags & OBJ_EX) && !(*flags & OBJ_EXAT) &&
                !(*flags & OBJ_PX) && !(*flags & OBJ_PXAT) &&
@@ -209,7 +222,7 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
                    !(*flags & OBJ_EXAT) && !(*flags & OBJ_PX) &&
                    !(*flags & OBJ_PXAT) && next)
         {
-            *flags |= OBJ_EX;
+            *flags |= OBJ_EX; /* ex/EX选项 */
             *expire = next;
             j++;
         } else if ((opt[0] == 'p' || opt[0] == 'P') &&
@@ -218,7 +231,7 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
                    !(*flags & OBJ_EX) && !(*flags & OBJ_EXAT) &&
                    !(*flags & OBJ_PXAT) && next)
         {
-            *flags |= OBJ_PX;
+            *flags |= OBJ_PX; /* px/PX选项 */
             *unit = UNIT_MILLISECONDS;
             *expire = next;
             j++;
@@ -230,7 +243,7 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
                    !(*flags & OBJ_EX) && !(*flags & OBJ_PX) &&
                    !(*flags & OBJ_PXAT) && next)
         {
-            *flags |= OBJ_EXAT;
+            *flags |= OBJ_EXAT; /* exat/EXAT选项 */
             *expire = next;
             j++;
         } else if ((opt[0] == 'p' || opt[0] == 'P') &&
@@ -241,11 +254,12 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
                    !(*flags & OBJ_EX) && !(*flags & OBJ_EXAT) &&
                    !(*flags & OBJ_PX) && next)
         {
-            *flags |= OBJ_PXAT;
+            *flags |= OBJ_PXAT; /* pxat/PXAT选项 */
             *unit = UNIT_MILLISECONDS;
             *expire = next;
             j++;
         } else {
+            /* 参数不可用 */
             addReplyErrorObject(c,shared.syntaxerr);
             return C_ERR;
         }
@@ -255,29 +269,40 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
 
 /* SET key value [NX] [XX] [KEEPTTL] [GET] [EX <seconds>] [PX <milliseconds>]
  *     [EXAT <seconds-timestamp>][PXAT <milliseconds-timestamp>] */
+/* set命令
+ * NX：当数据库中key不存在时，可以将key-value添加到数据库
+ * XX：当数据库中key存在时，可以将key-value设置到数据库，与NX参数互斥
+ * EX: key的超时秒数
+ * PX: key的超时毫秒数，与EX参数互斥
+ * EXAT: key的超时时间，单位秒
+ * PXAT：key的超时时间，单位毫秒
+ */
 void setCommand(client *c) {
     robj *expire = NULL;
     int unit = UNIT_SECONDS;
     int flags = OBJ_NO_FLAGS;
-
+    /* 设置选项参数 */
     if (parseExtendedStringArgumentsOrReply(c,&flags,&unit,&expire,COMMAND_SET) != C_OK) {
         return;
     }
-
+    /* 尝试对值对象进行编码 */
     c->argv[2] = tryObjectEncoding(c->argv[2]);
+    /* 执行set命令 */
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 }
-
+/* 在调用setGenericCommand时，
+ * 将flags赋值为OBJ_SET_NX，表示只有key不存在时才可以执行函数 */
 void setnxCommand(client *c) {
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,OBJ_SET_NX,c->argv[1],c->argv[2],NULL,0,shared.cone,shared.czero);
 }
-
+/* 将key-value设置到数据库，并且指定key的超时秒数 */
 void setexCommand(client *c) {
     c->argv[3] = tryObjectEncoding(c->argv[3]);
     setGenericCommand(c,OBJ_EX,c->argv[1],c->argv[3],c->argv[2],UNIT_SECONDS,NULL,NULL);
 }
 
+/* 将key-value设置到数据库，并且指定key的超时毫秒数 */
 void psetexCommand(client *c) {
     c->argv[3] = tryObjectEncoding(c->argv[3]);
     setGenericCommand(c,OBJ_PX,c->argv[1],c->argv[3],c->argv[2],UNIT_MILLISECONDS,NULL,NULL);
@@ -418,89 +443,112 @@ void getdelCommand(client *c) {
 }
 
 void getsetCommand(client *c) {
+    /* 取出并返回键的值对象 */
     if (getGenericCommand(c) == C_ERR) return;
+    /* 编码键的新值 c->argv[2] */
     c->argv[2] = tryObjectEncoding(c->argv[2]);
+    /* 将数据库中关联键 c->argv[1] 和新值对象 c->argv[2] */
     setKey(c,c->db,c->argv[1],c->argv[2]);
+    /* 发送事件通知 */
     notifyKeyspaceEvent(NOTIFY_STRING,"set",c->argv[1],c->db->id);
     server.dirty++;
 
-    /* Propagate as SET command */
+    /* 转发set命令 */
     rewriteClientCommandArgument(c,0,shared.set);
 }
 
+/* setrange命令主要用于设置value的部分子串，设置时将值从偏移量offset开始覆盖成value值。
+ * 如果偏移值大于原值的长度，则偏移量之前的字符串由 \x00 填充 */
 void setrangeCommand(client *c) {
     robj *o;
     long offset;
     sds value = c->argv[3]->ptr;
-
+    /* 取出 offset 参数 */
     if (getLongFromObjectOrReply(c,c->argv[2],&offset,NULL) != C_OK)
         return;
-
+    /* 检查 offset 参数 */
     if (offset < 0) {
         addReplyError(c,"offset is out of range");
         return;
     }
-
+    /* 取出键现在的值对象 */
     o = lookupKeyWrite(c->db,c->argv[1]);
     if (o == NULL) {
-        /* Return 0 when setting nothing on a non-existing string */
+        /* 数据库中不存在该键 */
+        /* value 为空，没有什么可设置的，向客户端返回 0 */
         if (sdslen(value) == 0) {
             addReply(c,shared.czero);
             return;
         }
 
-        /* Return when the resulting string exceeds allowed size */
+        /* 如果设置后的长度会超过 Redis 的限制的话
+         * 那么放弃设置，向客户端发送一个出错回复
+         */
         if (checkStringLength(c,offset+sdslen(value)) != C_OK)
             return;
-
+        /* 如果 value 没有问题，可以设置，那么创建一个空字符串值对象
+         * 并在数据库中关联键 c->argv[1] 和这个空字符串对象 */
         o = createObject(OBJ_STRING,sdsnewlen(NULL, offset+sdslen(value)));
         dbAdd(c->db,c->argv[1],o);
     } else {
         size_t olen;
 
-        /* Key exists, check type */
+        /* 值对象存在，检查值对象的类型*/
         if (checkType(c,o,OBJ_STRING))
             return;
 
-        /* Return existing string length when setting nothing */
+        /* 取出原有字符串的长度，
+         * value 为空，没有什么可设置的，向客户端返回 原字符串长度 */
         olen = stringObjectLen(o);
         if (sdslen(value) == 0) {
             addReplyLongLong(c,olen);
             return;
         }
 
-        /* Return when the resulting string exceeds allowed size */
+        /* 如果设置后的长度会超过 Redis 的限制的话
+         * 那么放弃设置，向客户端发送一个出错回复
+         */
         if (checkStringLength(c,offset+sdslen(value)) != C_OK)
             return;
 
         /* Create a copy when the object is shared or encoded. */
         o = dbUnshareStringValue(c->db,c->argv[1],o);
     }
-
+    /* 这里的 sdslen(value) > 0 其实可以去掉，前面已经做了检测了*/
     if (sdslen(value) > 0) {
+        /* 扩展字符串值对象 */
         o->ptr = sdsgrowzero(o->ptr,offset+sdslen(value));
+        /* 将 value 复制到字符串中的指定的位置 */
         memcpy((char*)o->ptr+offset,value,sdslen(value));
+        /* 向数据库发送键被修改的信号 */
         signalModifiedKey(c,c->db,c->argv[1]);
+        /* 发送事件通知 */
         notifyKeyspaceEvent(NOTIFY_STRING,
             "setrange",c->argv[1],c->db->id);
+        /* 将服务器设为脏 */
         server.dirty++;
     }
+    /* 设置成功，返回新的字符串值给客户端 */
     addReplyLongLong(c,sdslen(o->ptr));
 }
 
+/* 获取字符串的部分子串 */
 void getrangeCommand(client *c) {
     robj *o;
     long long start, end;
     char *str, llbuf[32];
     size_t strlen;
-
+    /* 取出 start 参数 */
     if (getLongLongFromObjectOrReply(c,c->argv[2],&start,NULL) != C_OK)
         return;
+    /* 取出 end 参数 */
     if (getLongLongFromObjectOrReply(c,c->argv[3],&end,NULL) != C_OK)
         return;
+    /* 从数据库中查找键 c->argv[1] ，检查值对象类型是否是字符串 */
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptybulk)) == NULL ||
         checkType(c,o,OBJ_STRING)) return;
 
+    /* 根据编码，对对象的值进行处理 */
     if (o->encoding == OBJ_ENCODING_INT) {
         str = llbuf;
         strlen = ll2string(llbuf,sizeof(llbuf),(long)o->ptr);
@@ -508,12 +556,13 @@ void getrangeCommand(client *c) {
         str = o->ptr;
         strlen = sdslen(str);
     }
-
-    /* Convert negative indexes */
+    /* 当start和end都小于0，并且start大于end时，无法截取子串，此时start和end不合法
+     */
     if (start < 0 && end < 0 && start > end) {
         addReply(c,shared.emptybulk);
         return;
     }
+    /* 将负数索引转换为正数索引 */
     if (start < 0) start = strlen+start;
     if (end < 0) end = strlen+end;
     if (start < 0) start = 0;
@@ -523,24 +572,31 @@ void getrangeCommand(client *c) {
     /* Precondition: end >= 0 && end < strlen, so the only condition where
      * nothing can be returned is: start > end. */
     if (start > end || strlen == 0) {
+        /* 处理索引范围为空的情况 */
         addReply(c,shared.emptybulk);
     } else {
+        /* 向客户端返回给定范围内的字符串内容 */
         addReplyBulkCBuffer(c,(char*)str+start,end-start+1);
     }
 }
 
+/* 返回所有指定key的值 */
 void mgetCommand(client *c) {
     int j;
-
+    /* 查找并返回所有输入键的值 */
     addReplyArrayLen(c,c->argc-1);
     for (j = 1; j < c->argc; j++) {
+        /* 查找键 c->argc[j] 的值 */
         robj *o = lookupKeyRead(c->db,c->argv[j]);
         if (o == NULL) {
+            /* 值不存在，向客户端发送空回复 */
             addReplyNull(c);
         } else {
             if (o->type != OBJ_STRING) {
+                /* 值存在，但不是字符串类型 */
                 addReplyNull(c);
             } else {
+                /* 值存在，并且是字符串 */
                 addReplyBulk(c,o);
             }
         }
@@ -549,14 +605,14 @@ void mgetCommand(client *c) {
 
 void msetGenericCommand(client *c, int nx) {
     int j;
-
+    /* key/value是成对存在的，加上命令mset/msetnx，参数个数必须位奇数 */
     if ((c->argc % 2) == 0) {
         addReplyError(c,"wrong number of arguments for MSET");
         return;
     }
 
-    /* Handle the NX flag. The MSETNX semantic is to return zero and don't
-     * set anything if at least one key already exists. */
+    /* 当nx参数为1时，遍历每个key在数据库中是否存在，
+     * 当有任意一个key存在时，表示参数不合法 */
     if (nx) {
         for (j = 1; j < c->argc; j += 2) {
             if (lookupKeyWrite(c->db,c->argv[j]) != NULL) {
@@ -565,7 +621,7 @@ void msetGenericCommand(client *c, int nx) {
             }
         }
     }
-
+    /* 遍历参数表，将key/value写入数据库 */
     for (j = 1; j < c->argc; j += 2) {
         c->argv[j+1] = tryObjectEncoding(c->argv[j+1]);
         setKey(c,c->db,c->argv[j],c->argv[j+1]);
@@ -575,37 +631,47 @@ void msetGenericCommand(client *c, int nx) {
     addReply(c, nx ? shared.cone : shared.ok);
 }
 
+/* 一次性设置多个字符串，某个给定key已经存在，则mset会将原key的value值覆盖 */
 void msetCommand(client *c) {
     msetGenericCommand(c,0);
 }
 
+/* 一次性设置多个字符串，msetnx是当所有的key都不存在时才可以写入数据库 */
 void msetnxCommand(client *c) {
     msetGenericCommand(c,1);
 }
-
+/* key对应的value加/减指定值 */
 void incrDecrCommand(client *c, long long incr) {
     long long value, oldvalue;
     robj *o, *new;
-
+    /* 取出值对象 */
     o = lookupKeyWrite(c->db,c->argv[1]);
+    /* 检查对象是否存在，以及类型是否正确 */
     if (checkType(c,o,OBJ_STRING)) return;
+    /* 取出对象的整数值，并保存到 value 参数中 */
     if (getLongLongFromObjectOrReply(c,o,&value,NULL) != C_OK) return;
 
+    /* 检查加法操作执行之后值是否会溢出
+     * 如果溢出的话，就向客户端发送一个出错回复，并放弃设置操作 */
     oldvalue = value;
     if ((incr < 0 && oldvalue < 0 && incr < (LLONG_MIN-oldvalue)) ||
         (incr > 0 && oldvalue > 0 && incr > (LLONG_MAX-oldvalue))) {
         addReplyError(c,"increment or decrement would overflow");
         return;
     }
-    value += incr;
 
+    /* 进行加法计算 */
+    value += incr;
     if (o && o->refcount == 1 && o->encoding == OBJ_ENCODING_INT &&
         (value < 0 || value >= OBJ_SHARED_INTEGERS) &&
         value >= LONG_MIN && value <= LONG_MAX)
     {
+        /* robj的ptr是可以直接存储一个long值的，
+         * 这里只要robj没有被引用且不是共享对象，ptr直接赋值为value值 */
         new = o;
         o->ptr = (void*)((long)value);
     } else {
+        /* 将值保存到新的值对象中，然后用新的值对象替换原来的值对象 */
         new = createStringObjectFromLongLongForValue(value);
         if (o) {
             dbOverwrite(c->db,c->argv[1],new);
@@ -613,36 +679,40 @@ void incrDecrCommand(client *c, long long incr) {
             dbAdd(c->db,c->argv[1],new);
         }
     }
+    /* 向数据库发送键被修改的信号 */
     signalModifiedKey(c,c->db,c->argv[1]);
+    /* 发送事件通知 */
     notifyKeyspaceEvent(NOTIFY_STRING,"incrby",c->argv[1],c->db->id);
+    /* 将服务器设为脏 */
     server.dirty++;
+    /* 返回回复 */
     addReply(c,shared.colon);
     addReply(c,new);
     addReply(c,shared.crlf);
 }
-
+/* 将key存储的值加1 */
 void incrCommand(client *c) {
     incrDecrCommand(c,1);
 }
-
+/* 将key存储的值减1 */
 void decrCommand(client *c) {
     incrDecrCommand(c,-1);
 }
-
+/* 将key存储的值加指定值 */
 void incrbyCommand(client *c) {
     long long incr;
 
     if (getLongLongFromObjectOrReply(c, c->argv[2], &incr, NULL) != C_OK) return;
     incrDecrCommand(c,incr);
 }
-
+/* 将key存储的值减指定值 */
 void decrbyCommand(client *c) {
     long long incr;
 
     if (getLongLongFromObjectOrReply(c, c->argv[2], &incr, NULL) != C_OK) return;
     incrDecrCommand(c,-incr);
 }
-
+/* 将key存储的值加指定flaot值 */
 void incrbyfloatCommand(client *c) {
     long double incr, value;
     robj *o, *new;
@@ -676,30 +746,37 @@ void incrbyfloatCommand(client *c) {
     rewriteClientCommandArgument(c,3,shared.keepttl);
 }
 
+/* 将value追加到原值的末尾，如果key不存在，
+ * 此命令等同于set key value命令 */
 void appendCommand(client *c) {
     size_t totlen;
     robj *o, *append;
-
+    /* 取出键相应的值对象 */
     o = lookupKeyWrite(c->db,c->argv[1]);
     if (o == NULL) {
-        /* Create the key */
+        /* 键值对不存在，创建一个新的key/value到数据库 */
         c->argv[2] = tryObjectEncoding(c->argv[2]);
         dbAdd(c->db,c->argv[1],c->argv[2]);
         incrRefCount(c->argv[2]);
         totlen = stringObjectLen(c->argv[2]);
     } else {
-        /* Key exists, check type */
+        /* 键值对存在，检查类型，只有string类型能append */
         if (checkType(c,o,OBJ_STRING))
             return;
 
-        /* "append" is an argument, so always an sds */
+        /* 检查追加操作之后，字符串的长度是否符合 Redis 的限制 */
         append = c->argv[2];
         totlen = stringObjectLen(o)+sdslen(append->ptr);
+        /* 追加后的字符串长度必须小于512MB */
         if (checkStringLength(c,totlen) != C_OK)
             return;
+        /* 在服务端接收到命令的时候，就已经判断了命令的最大长度不能大于512 MB，
+         * 所以set命令不需要再次判断 */
 
-        /* Append the value */
+        /* 字符串追加会修改原字符串的值，所以必须保证字符串是非共享的。
+         * 如果字符串是共享的，则需要解除共享，新创建一个值对象 */
         o = dbUnshareStringValue(c->db,c->argv[1],o);
+        /* 值对象创建好之后，将新字符串追加到原字符串末尾 */
         o->ptr = sdscatlen(o->ptr,append->ptr,sdslen(append->ptr));
         totlen = sdslen(o->ptr);
     }
@@ -709,10 +786,13 @@ void appendCommand(client *c) {
     addReplyLongLong(c,totlen);
 }
 
+/* 数据库中获取到value，返回value字符串的长度 */
 void strlenCommand(client *c) {
     robj *o;
+    /* 取出值对象，并进行类型检查 */
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
         checkType(c,o,OBJ_STRING)) return;
+    /* 返回字符串值的长度 */
     addReplyLongLong(c,stringObjectLen(o));
 }
 

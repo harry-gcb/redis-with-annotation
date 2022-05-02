@@ -466,24 +466,24 @@ robj *hashTypeLookupWriteOrCreate(client *c, robj *key) {
     }
     return o;
 }
-
+/* 散列表的底层结构由ziplist编码转换为散列表编码 */
 void hashTypeConvertZiplist(robj *o, int enc) {
     serverAssert(o->encoding == OBJ_ENCODING_ZIPLIST);
 
     if (enc == OBJ_ENCODING_ZIPLIST) {
-        /* Nothing to do... */
+        /* 不再转换为ziplist编码了 */
 
     } else if (enc == OBJ_ENCODING_HT) {
         hashTypeIterator *hi;
         dict *dict;
         int ret;
 
-        hi = hashTypeInitIterator(o);
-        dict = dictCreate(&hashDictType, NULL);
+        hi = hashTypeInitIterator(o);           /* 初始化迭代器 */
+        dict = dictCreate(&hashDictType, NULL); /* 创建散列表 */
 
         while (hashTypeNext(hi) != C_ERR) {
             sds key, value;
-
+            /* 遍历所有数据，将其加入到散列表 */
             key = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_KEY);
             value = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_VALUE);
             ret = dictAdd(dict, key, value);
@@ -493,10 +493,11 @@ void hashTypeConvertZiplist(robj *o, int enc) {
                 serverPanic("Ziplist corruption detected");
             }
         }
-        hashTypeReleaseIterator(hi);
-        zfree(o->ptr);
-        o->encoding = OBJ_ENCODING_HT;
-        o->ptr = dict;
+
+        hashTypeReleaseIterator(hi);   /* 释放迭代器 */
+        zfree(o->ptr);                 /* 释放原始数据 */
+        o->encoding = OBJ_ENCODING_HT; /* 编码类型改为散列表 */
+        o->ptr = dict; /* 数据内容部分指向新的散列表 */
     } else {
         serverPanic("Unknown hash encoding");
     }
@@ -662,6 +663,8 @@ void hsetnxCommand(client *c) {
     }
 }
 
+/* 将key对应的散列表中的field域设置为value，如果key不存在则新建散列表。
+ * field域不存在则新建field域，将其值设置为value，并返回1 */
 void hsetCommand(client *c) {
     int i, created = 0;
     robj *o;

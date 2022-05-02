@@ -194,7 +194,7 @@ struct redisServer server; /* Server global state */
 
 struct redisCommand redisCommandTable[] = {
     {"module", moduleCommand, -2, "admin no-script", 0, NULL, 0, 0, 0, 0, 0, 0},
-
+    /* 获取key的值 */
     {"get", getCommand, 2, "read-only fast @string", 0, NULL, 1, 1, 1, 0, 0, 0},
 
     {"getex", getexCommand, -2, "write fast @string", 0, NULL, 1, 1, 1, 0, 0,
@@ -202,63 +202,64 @@ struct redisCommand redisCommandTable[] = {
 
     {"getdel", getdelCommand, 2, "write fast @string", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
-    /* Note that we can't flag set as fast, since it may perform an
-     * implicit DEL of a large key. */
+    /* 将key-value设置到数据库
+     * 注意：我们不能将set标记为快速，因为它可能会隐式执行大key的 DEL。*/
     {"set", setCommand, -3, "write use-memory @string", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
+    /* 将key-value设置到数据库，当且仅当key不存在时 */
     {"setnx", setnxCommand, 3, "write use-memory fast @string", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 将key-value设置到数据库，并且指定key的超时秒数 */
     {"setex", setexCommand, 4, "write use-memory @string", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 将key-value设置到数据库，并且指定key的超时毫秒数 */
     {"psetex", psetexCommand, 4, "write use-memory @string", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 将value追加到原值的末尾，如果key不存在，此命令等同于set key value命令 */
     {"append", appendCommand, 3, "write use-memory fast @string", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 从数据库中获取到value，返回value字符串的长度 */
     {"strlen", strlenCommand, 2, "read-only fast @string", 0, NULL, 1, 1, 1, 0,
      0, 0},
     /* 同步删除一个或多个key，因为是同步删除，所以在删除大key时可能会阻塞服务器
      */
     {"del", delCommand, -2, "write @keyspace", 0, NULL, 1, -1, 1, 0, 0, 0},
-    /* 异步方式删除key，这可以避免del删除大key的问题，unlink在删除时会判断删除所需的工作量，以此决定使用同步还是异步删除 */
+    /* 异步方式删除key，这可以避免del删除大key的问题，unlink在删除时会判断删除所需的工作量，以此决定使用同步还是异步删除
+     */
     {"unlink", unlinkCommand, -2, "write fast @keyspace", 0, NULL, 1, -1, 1, 0,
      0, 0},
     /* 判断指定的key是否存在，并返回key存在的数量，使用频率高 */
     {"exists", existsCommand, -2, "read-only fast @keyspace", 0, NULL, 1, -1, 1,
      0, 0, 0},
-
+    /* 对key所存储的字符串值，设置指定偏移量上的比特位 */
     {"setbit", setbitCommand, 4, "write use-memory @bitmap", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 对key所存储的字符串，获取指定偏移量上的比特位 */
     {"getbit", getbitCommand, 3, "read-only fast @bitmap", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 将字符串当成一个二进制数组，并对这个字节数组第offset位开始进行获取、设置、增加值等
+     */
     {"bitfield", bitfieldCommand, -2, "write use-memory @bitmap", 0, NULL, 1, 1,
      1, 0, 0, 0},
 
     {"bitfield_ro", bitfieldroCommand, -2, "read-only fast @bitmap", 0, NULL, 1,
      1, 1, 0, 0, 0},
-
+    /* 设置value的部分子串，设置时将值从偏移量offset开始覆盖成value值 */
     {"setrange", setrangeCommand, 4, "write use-memory @string", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 获取字符串的部分子串 */
     {"getrange", getrangeCommand, 4, "read-only @string", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 获取字符串的部分子串 */
     {"substr", getrangeCommand, 4, "read-only @string", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
+    /* 将key存储的值加1 */
     {"incr", incrCommand, 2, "write use-memory fast @string", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 将key存储的值减1 */
     {"decr", decrCommand, 2, "write use-memory fast @string", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 返回所有指定key的值 */
     {"mget", mgetCommand, -2, "read-only fast @string", 0, NULL, 1, -1, 1, 0, 0,
      0},
 
@@ -455,7 +456,7 @@ struct redisCommand redisCommandTable[] = {
 
     {"zrandmember", zrandmemberCommand, -2, "read-only random @sortedset", 0,
      NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 将key对应的散列表中的field域设置为value */
     {"hset", hsetCommand, -4, "write use-memory fast @hash", 0, NULL, 1, 1, 1,
      0, 0, 0},
 
@@ -500,22 +501,23 @@ struct redisCommand redisCommandTable[] = {
 
     {"hscan", hscanCommand, -3, "read-only random @hash", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 将key存储的值加指定值 */
     {"incrby", incrbyCommand, 3, "write use-memory fast @string", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 将key存储的值减指定值 */
     {"decrby", decrbyCommand, 3, "write use-memory fast @string", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 将key存储的值加指定float */
     {"incrbyfloat", incrbyfloatCommand, 3, "write use-memory fast @string", 0,
      NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 将给定key的值设为value，并返回key的旧值 */
     {"getset", getsetCommand, 3, "write use-memory fast @string", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 一次性设置多个字符串，某个给定key已经存在，则mset会将原key的value值覆盖
+     */
     {"mset", msetCommand, -3, "write use-memory @string", 0, NULL, 1, -1, 2, 0,
      0, 0},
-
+    /* 一次性设置多个字符串，msetnx是当所有的key都不存在时才可以写入数据库 */
     {"msetnx", msetnxCommand, -3, "write use-memory @string", 0, NULL, 1, -1, 2,
      0, 0, 0},
     /* 随机返回数据库中的key，使用频率较低 */
@@ -739,13 +741,16 @@ struct redisCommand redisCommandTable[] = {
 
     {"time", timeCommand, 1, "random fast ok-loading ok-stale", 0, NULL, 0, 0,
      0, 0, 0, 0},
-
+    /* 对一个或多个key执行元操作，并将结果保存在一个新的key上，
+     * 其中op_name可以是AND、OR、NOT、XOR这4种操作的任意一种 */
     {"bitop", bitopCommand, -4, "write use-memory @bitmap", 0, NULL, 2, -1, 1,
      0, 0, 0},
-
+    /* 获取字符串从start字节到end字节比特位值为1的数量 */
     {"bitcount", bitcountCommand, -2, "read-only @bitmap", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 将key所存储的字符串当作一个字节数组，
+     * 从第start个字节开始（注意已经经过了8*start个索引），
+     * 返回第一个被设置为bit值的索引值 */
     {"bitpos", bitposCommand, -3, "read-only @bitmap", 0, NULL, 1, 1, 1, 0, 0,
      0},
 
