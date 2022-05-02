@@ -459,46 +459,48 @@ struct redisCommand redisCommandTable[] = {
     /* 将key对应的散列表中的field域设置为value */
     {"hset", hsetCommand, -4, "write use-memory fast @hash", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 将key对应的散列表中的field域设置为value，如果field已经存在，不进行任何操作
+     */
     {"hsetnx", hsetnxCommand, 4, "write use-memory fast @hash", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 获取单个field对应的value值 */
     {"hget", hgetCommand, 3, "read-only fast @hash", 0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 将key对应的散列表中的field域设置为value */
     {"hmset", hsetCommand, -4, "write use-memory fast @hash", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 获取多个field对应的value值 */
     {"hmget", hmgetCommand, -3, "read-only fast @hash", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
+    /* 将field对应的value增加increment（整型） */
     {"hincrby", hincrbyCommand, 4, "write use-memory fast @hash", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 将field对应的value增加increment （浮点型）*/
     {"hincrbyfloat", hincrbyfloatCommand, 4, "write use-memory fast @hash", 0,
      NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 将key对应的散列表中的field删除 */
     {"hdel", hdelCommand, -3, "write fast @hash", 0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 获取散列表中field的个数，主要用于数据统计 */
     {"hlen", hlenCommand, 2, "read-only fast @hash", 0, NULL, 1, 1, 1, 0, 0, 0},
 
     {"hstrlen", hstrlenCommand, 3, "read-only fast @hash", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 获取某个key下的所有field信息 */
     {"hkeys", hkeysCommand, 2, "read-only to-sort @hash", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 获取每个field对应的value信息 */
     {"hvals", hvalsCommand, 2, "read-only to-sort @hash", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 获取所有的field-value对 */
     {"hgetall", hgetallCommand, 2, "read-only random @hash", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* hexists命令用于查看某个field是否存在，可以用于标识某个操作之前是否已经执行过
+     */
     {"hexists", hexistsCommand, 3, "read-only fast @hash", 0, NULL, 1, 1, 1, 0,
      0, 0},
 
     {"hrandfield", hrandfieldCommand, -2, "read-only random @hash", 0, NULL, 1,
      1, 1, 0, 0, 0},
-
+    /* 遍历散列表中所有的field-value对，底层为散列表时为渐进式遍历 */
     {"hscan", hscanCommand, -3, "read-only random @hash", 0, NULL, 1, 1, 1, 0,
      0, 0},
     /* 将key存储的值加指定值 */
