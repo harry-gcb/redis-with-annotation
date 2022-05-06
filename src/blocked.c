@@ -86,6 +86,7 @@ typedef struct bkinfo {
 /* Block a client for the specific operation type. Once the CLIENT_BLOCKED
  * flag is set client query buffer is not longer processed, but accumulated,
  * and will be processed when the client is unblocked. */
+/* 对给定的客户端进行阻塞 */
 void blockClient(client *c, int btype) {
     /* Master client should never be blocked unless pause or module */
     serverAssert(!(c->flags & CLIENT_MASTER &&
@@ -264,25 +265,32 @@ void disconnectAllBlockedClients(void) {
 /* Helper function for handleClientsBlockedOnKeys(). This function is called
  * when there may be clients blocked on a list key, and there may be new
  * data to fetch (the key is ready). */
+/* 为阻塞在list类型的key的client提供服务 */
 void serveClientsBlockedOnListKey(robj *o, readyList *rl) {
     /* We serve clients in the same order they blocked for
-     * this key, from the first blocked to the last. */
+     * this key, from the first blocked to the last.
+     * 按照因为此key block的顺序为客户提供服务，从第一个到最后一个
+     */
     dictEntry *de = dictFind(rl->db->blocking_keys,rl->key);
     if (de) {
+        /* 取出阻塞在此key上的client列表 */
         list *clients = dictGetVal(de);
+        /* 阻塞在此key上的client个数 */
         int numclients = listLength(clients);
 
         while(numclients--) {
+            /* 第一个阻塞在此key的client */
             listNode *clientnode = listFirst(clients);
             client *receiver = clientnode->value;
-
+            /* 如果这个client要处理的数据类型不是list，
+             * 再把这个client塞会链表尾部 */
             if (receiver->btype != BLOCKED_LIST) {
                 /* Put at the tail, so that at the next call
                  * we'll not run into it again. */
                 listRotateHeadToTail(clients);
                 continue;
             }
-
+            /* 从client中取出block时的数据 */
             robj *dstkey = receiver->bpop.target;
             int wherefrom = receiver->bpop.listpos.wherefrom;
             int whereto = receiver->bpop.listpos.whereto;
@@ -296,6 +304,7 @@ void serveClientsBlockedOnListKey(robj *o, readyList *rl) {
 
                 monotime replyTimer;
                 elapsedStart(&replyTimer);
+                /* 值 value 推入到造成客户端 receiver 阻塞的 key 上 */
                 if (serveClientBlockedOnList(receiver,
                     rl->key,dstkey,rl->db,value,
                     wherefrom, whereto) == C_ERR)
@@ -305,6 +314,7 @@ void serveClientsBlockedOnListKey(robj *o, readyList *rl) {
                     listTypePush(o,value,wherefrom);
                 }
                 updateStatsOnUnblock(receiver, 0, elapsedUs(replyTimer));
+                /* 遍历客户端，解除其阻塞装填 */
                 unblockClient(receiver);
 
                 if (dstkey) decrRefCount(dstkey);
@@ -546,7 +556,18 @@ void serveClientsBlockedOnKeyByModule(readyList *rl) {
  * other side of the linked list. However as long as the key starts to
  * be used only for a single type, like virtually any Redis application will
  * do, the function is already fair. */
+/* 对所有被阻塞在某个客户端的 key 来说，只要这个 key 被执行了某种 PUSH 操作
+ * 那么这个 key 就会被放到 serve.ready_keys 去
+ *
+ * 这个函数会遍历整个 serve.ready_keys 链表，
+ * 并将里面的 key 的元素弹出给被阻塞客户端，
+ * 从而解除客户端的阻塞状态
+ *
+ * 函数会一次又一次地进行迭代，
+ * 因此它在执行 BRPOPLPUSH 命令的情况下也可以正常获取到正确的新被阻塞客户端
+ */
 void handleClientsBlockedOnKeys(void) {
+    /* 遍历整个 ready_keys 链表 */
     while(listLength(server.ready_keys) != 0) {
         list *l;
 
@@ -554,15 +575,19 @@ void handleClientsBlockedOnKeys(void) {
          * locally. This way as we run the old list we are free to call
          * signalKeyAsReady() that may push new elements in server.ready_keys
          * when handling clients blocked into BLMOVE. */
+        /* 备份旧的 ready_keys ，再给服务器端赋值一个新的 */
         l = server.ready_keys;
         server.ready_keys = listCreate();
-
+        /* 处理阻塞在ready_keys链表上的client */
         while(listLength(l) != 0) {
+            /* 取出 ready_keys 中的首个链表节点 */
             listNode *ln = listFirst(l);
+            /* 指向 readyList 结构 */
             readyList *rl = ln->value;
 
             /* First of all remove this key from db->ready_keys so that
              * we can safely call signalKeyAsReady() against this key. */
+            /* 从 db->ready_keys 中移除就绪的 key */
             dictDelete(rl->db->ready_keys,rl->key);
 
             /* Even if we are not inside call(), increment the call depth
@@ -575,9 +600,9 @@ void handleClientsBlockedOnKeys(void) {
             server.fixed_time_expire++;
             updateCachedTime(0);
 
-            /* Serve clients blocked on the key. */
+            /* 为 key 上被阻止的客户提供服务。 */
             robj *o = lookupKeyWrite(rl->db,rl->key);
-
+            /* key的值对象不为空，为阻塞在key上的client提供服务 */
             if (o != NULL) {
                 if (o->type == OBJ_LIST)
                     serveClientsBlockedOnListKey(o,rl);
@@ -592,11 +617,12 @@ void handleClientsBlockedOnKeys(void) {
             }
             server.fixed_time_expire--;
 
-            /* Free this item. */
+            /* 释放节点 */
             decrRefCount(rl->key);
             zfree(rl);
             listDelNode(l,ln);
         }
+        /* 释放ready_keys链表 */
         listRelease(l); /* We have the new list on place at this point. */
     }
 }
@@ -627,36 +653,70 @@ void handleClientsBlockedOnKeys(void) {
  * for all the 'numkeys' keys as in the 'keys' argument. When we block for
  * stream keys, we also provide an array of streamID structures: clients will
  * be unblocked only when items with an ID greater or equal to the specified
- * one is appended to the stream. */
+ * one is appended to the stream.
+ *
+ * 以下是目前的阻塞 POP 操作的运作方法，以 BLPOP 作为例子：
+ * - 如果用户调用 BLPOP ，并且列表非空，那么程序执行 LPOP
+ *   因此，当列表非空时，调用 BLPOP 等于调用 LPOP
+ * - 当 BLPOP 对一个空键执行时，客户端才会被阻塞：
+ *   服务器不再对这个客户端发送任何数据，
+ *   对这个客户端的状态设为“被阻塞“，直到解除阻塞为止
+ *   并且客户端会被加入到一个以阻塞键为 key ，
+ *   以被阻塞客户端为 value 的字典 db->blocking_keys 中
+ *
+ * 当有 PUSH 命令作用于一个造成客户端阻塞的键时，
+ * 程序将这个键标记为“就绪”，并且在执行完这个命令、事务、或脚本之后，
+ * 程序会按“先阻塞先服务”的顺序，将列表的元素返回给那些被阻塞的客户端，
+ * 被解除阻塞的客户端数量取决于 PUSH 命令推入的元素数量
+ * */
+/**
+ * 根据给定数量的 key ，对给定客户端进行阻塞
+ * keys    任意多个 key
+ * numkeys keys 的键数量
+ * timeout 阻塞的最长时限
+ * target  在解除阻塞时，将结果保存到这个 key 对象，
+ *         而不是返回给客户端只用于 BRPOPLPUSH 命令
+ * listpos lpop还是rpop
+ */
 void blockForKeys(client *c, int btype, robj **keys, int numkeys, mstime_t timeout, robj *target, struct listPos *listpos, streamID *ids) {
     dictEntry *de;
     list *l;
     int j;
-
+    /* 设置阻塞状态的超时和目标选项 */
     c->bpop.timeout = timeout;
+    /* target 在执行 RPOPLPUSH 命令时使用 */
     c->bpop.target = target;
-
+    /* 表示lpop还是rpop */
     if (listpos != NULL) c->bpop.listpos = *listpos;
 
     if (target != NULL) incrRefCount(target);
-
+    /* 关联阻塞客户端和键的相关信息 */
     for (j = 0; j < numkeys; j++) {
-        /* Allocate our bkinfo structure, associated to each key the client
-         * is blocked for. */
+        /* 分配我们的 bkinfo 结构，与客户端被阻止的每个键相关联
+         * client可能阻塞在多个key上了，当client因为某个client被
+         * 解除阻塞状态时，通过这个结构释放所有阻塞的client
+         */
         bkinfo *bki = zmalloc(sizeof(*bki));
         if (btype == BLOCKED_STREAM)
             bki->stream_id = ids[j];
 
-        /* If the key already exists in the dictionary ignore it. */
+        /* c->bpop.keys 是一个集合（值为 NULL 的字典）
+         * 它记录所有造成客户端阻塞的键
+         * 以下语句在键不存在于集合的时候，将它添加到集合
+         * 如果该键已存在于字典中，则忽略它. */
         if (dictAdd(c->bpop.keys,keys[j],bki) != DICT_OK) {
             zfree(bki);
             continue;
         }
         incrRefCount(keys[j]);
 
-        /* And in the other "side", to map keys -> clients */
+        /* And in the other "side", to map keys -> clients
+         * 字典的键为造成客户端阻塞的键
+         * 而值则是一个链表，链表中包含了所有被阻塞的客户端
+         * 以下程序将阻塞键和被阻塞客户端关联起来 */
         de = dictFind(c->db->blocking_keys,keys[j]);
         if (de == NULL) {
+            /* 链表不存在，新创建一个，并将它关联到字典中 */
             int retval;
 
             /* For every key we take a list of clients blocked for it */
@@ -667,9 +727,11 @@ void blockForKeys(client *c, int btype, robj **keys, int numkeys, mstime_t timeo
         } else {
             l = dictGetVal(de);
         }
+        /* 将客户端填接到被阻塞客户端的链表中 */
         listAddNodeTail(l,c);
         bki->listnode = listLast(l);
     }
+    /* 对给定的客户端进行阻塞 */
     blockClient(c,btype);
 }
 
@@ -731,7 +793,7 @@ static int getBlockedTypeByType(int type) {
 void signalKeyAsReady(redisDb *db, robj *key, int type) {
     readyList *rl;
 
-    /* Quick returns. */
+    /* 快速判断阻塞类型，无果某类型不支持阻塞，直接返回 */
     int btype = getBlockedTypeByType(type);
     if (btype == BLOCKED_NONE) {
         /* The type can never block. */
@@ -746,22 +808,21 @@ void signalKeyAsReady(redisDb *db, robj *key, int type) {
         return;
     }
 
-    /* No clients blocking for this key? No need to queue it. */
+    /* 没有客户端因为此key而阻塞，直接返回 */
     if (dictFind(db->blocking_keys,key) == NULL) return;
 
-    /* Key was already signaled? No need to queue it again. */
+    /* 这个阻塞的key已经处理过了，没必要再处理一遍 */
     if (dictFind(db->ready_keys,key) != NULL) return;
 
-    /* Ok, we need to queue this key into server.ready_keys. */
+    /* 把该key添加到ready_keys字典 */
     rl = zmalloc(sizeof(*rl));
     rl->key = key;
     rl->db = db;
     incrRefCount(key);
     listAddNodeTail(server.ready_keys,rl);
 
-    /* We also add the key in the db->ready_keys dictionary in order
-     * to avoid adding it multiple times into a list with a simple O(1)
-     * check. */
+    /* 在 db->ready_keys 字典中添加键，
+     * 以避免通过简单的 O(1) 检查将其多次添加到列表中 */
     incrRefCount(key);
     serverAssert(dictAdd(db->ready_keys,key,NULL) == DICT_OK);
 }

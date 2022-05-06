@@ -1608,10 +1608,11 @@ struct redisServer
     int oom_score_adj;                          /* If true, oom_score_adj is managed */
     int disable_thp;                            /* If true, disable THP by syscall */
     /* Blocked clients */
-    unsigned int blocked_clients; /* # of clients executing a blocking cmd.*/
-    unsigned int blocked_clients_by_type[BLOCKED_NUM];
+    unsigned int blocked_clients; /* 执行阻塞命令的客户端的个数 */
+    unsigned int
+        blocked_clients_by_type[BLOCKED_NUM]; /* 执行阻塞命令的client的类型 */
     list *unblocked_clients; /* list of clients to unblock before next loop */
-    list *ready_keys;        /* List of readyList structures for BLPOP & co */
+    list *ready_keys;        /* reay_keys列表，存储client阻塞的key */
     /* Client side caching. */
     unsigned int tracking_clients;  /* # of clients with tracking enabled.*/
     size_t tracking_table_max_keys; /* Max number of keys in tracking table. */
@@ -1631,8 +1632,8 @@ struct redisServer
     size_t stream_node_max_bytes;
     long long stream_node_max_entries;
     /* List parameters */
-    int list_max_ziplist_size;
-    int list_compress_depth;
+    int list_max_ziplist_size; /* 配置节点所占内存大小 */
+    int list_compress_depth; /* compress参数，两端各有compress个节点不压缩 */
     /* time cache */
     redisAtomic time_t unixtime; /* Unix time sampled every cron cycle. */
     time_t timezone;             /* Cached timezone. As set by tzset(). */

@@ -262,26 +262,26 @@ struct redisCommand redisCommandTable[] = {
     /* 返回所有指定key的值 */
     {"mget", mgetCommand, -2, "read-only fast @string", 0, NULL, 1, -1, 1, 0, 0,
      0},
-
+    /* 在列表尾部插入元素，并返回列表的总长度 */
     {"rpush", rpushCommand, -3, "write use-memory fast @list", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 在列表头部插入元素，并返回列表的总长度 */
     {"lpush", lpushCommand, -3, "write use-memory fast @list", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 在列表尾部插入元素，列表不存在时直接返回 */
     {"rpushx", rpushxCommand, -3, "write use-memory fast @list", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 在列表头部插入元素，列表不存在时直接返回 */
     {"lpushx", lpushxCommand, -3, "write use-memory fast @list", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 将值value插入到列表key，且位于值pivot之前或之后 */
     {"linsert", linsertCommand, 5, "write use-memory @list", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 从列表尾部弹出元素，并返回给客户端 */
     {"rpop", rpopCommand, -2, "write fast @list", 0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 从列表头部弹出元素，并返回给客户端 */
     {"lpop", lpopCommand, -2, "write fast @list", 0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 阻塞版本的POP：即当列表对象不存在，会阻塞客户端 */
     {"brpop", brpopCommand, -3, "write no-script @list @blocking", 0, NULL, 1,
      -2, 1, 0, 0, 0},
 
@@ -290,23 +290,23 @@ struct redisCommand redisCommandTable[] = {
 
     {"blmove", blmoveCommand, 6, "write use-memory no-script @list @blocking",
      0, NULL, 1, 2, 1, 0, 0, 0},
-
+    /* 阻塞版本的POP：即当列表对象不存在，会阻塞客户端 */
     {"blpop", blpopCommand, -3, "write no-script @list @blocking", 0, NULL, 1,
      -2, 1, 0, 0, 0},
-
+    /* 获取列表长度（元素数目） */
     {"llen", llenCommand, 2, "read-only fast @list", 0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 获取索引为index的元素 */
     {"lindex", lindexCommand, 3, "read-only @list", 0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 设置指定索引位置的元素值 */
     {"lset", lsetCommand, 4, "write use-memory @list", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
+    /* 获取指定索引范围内的所有元素 */
     {"lrange", lrangeCommand, 4, "read-only @list", 0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 裁剪列表，只保留区间start与stop内的元素 */
     {"ltrim", ltrimCommand, 4, "write @list", 0, NULL, 1, 1, 1, 0, 0, 0},
 
     {"lpos", lposCommand, -3, "read-only @list", 0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 移除列表中与参数value相等的元素，并返回被移除的元素数目 */
     {"lrem", lremCommand, 4, "write @list", 0, NULL, 1, 1, 1, 0, 0, 0},
 
     {"rpoplpush", rpoplpushCommand, 3, "write use-memory @list", 0, NULL, 1, 2,
@@ -314,29 +314,29 @@ struct redisCommand redisCommandTable[] = {
 
     {"lmove", lmoveCommand, 5, "write use-memory @list", 0, NULL, 1, 2, 1, 0, 0,
      0},
-
+    /* 将一个或多个元素加入到集合key当中，返回加入成功的个数 */
     {"sadd", saddCommand, -3, "write use-memory fast @set", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 删除集合中的指定成员 */
     {"srem", sremCommand, -3, "write fast @set", 0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 将member元素从source集合移动到destination集合 */
     {"smove", smoveCommand, 4, "write fast @set", 0, NULL, 1, 2, 1, 0, 0, 0},
-
+    /* 判断元素是否在指定集合中 */
     {"sismember", sismemberCommand, 3, "read-only fast @set", 0, NULL, 1, 1, 1,
      0, 0, 0},
 
     {"smismember", smismemberCommand, -3, "read-only fast @set", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 获取集合中的元素数量（集合基数） */
     {"scard", scardCommand, 2, "read-only fast @set", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
+    /* 删除并返回集合中的一个或多个随机元素 */
     {"spop", spopCommand, -2, "write random fast @set", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
+    /* 返回集合中的一个或多个随机元素 */
     {"srandmember", srandmemberCommand, -2, "read-only random @set", 0, NULL, 1,
      1, 1, 0, 0, 0},
-
+    /* 求多集合的交集 */
     {"sinter", sinterCommand, -2, "read-only to-sort @set", 0, NULL, 1, -1, 1,
      0, 0, 0},
 
@@ -354,10 +354,10 @@ struct redisCommand redisCommandTable[] = {
 
     {"sdiffstore", sdiffstoreCommand, -3, "write use-memory @set", 0, NULL, 1,
      -1, 1, 0, 0, 0},
-
+    /* 返回集合key中的所有成员。不存在的key被视为空集合 */
     {"smembers", sinterCommand, 2, "read-only to-sort @set", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 增量遍历集合元素 */
     {"sscan", sscanCommand, -3, "read-only random @set", 0, NULL, 1, 1, 1, 0, 0,
      0},
 
@@ -1314,6 +1314,7 @@ dictType replScriptCacheDictType = {
     NULL                        /* allow to expand */
 };
 
+/* 计算hash表是否需要resize */
 int htNeedsResize(dict *dict) {
     long long size, used;
 
@@ -4100,8 +4101,10 @@ int processCommand(client *c) {
     } else {
         call(c,CMD_CALL_FULL);
         c->woff = server.master_repl_offset;
-        if (listLength(server.ready_keys))
+        /* server.ready_keys链表不为空，则说明有客户端可以解除阻塞状态了 */
+        if (listLength(server.ready_keys)) {
             handleClientsBlockedOnKeys();
+        }
     }
 
     return C_OK;

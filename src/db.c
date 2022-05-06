@@ -224,16 +224,19 @@ robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply) {
     return o;
 }
 
-/* Add the key to the DB. It's up to the caller to increment the reference
- * counter of the value if needed.
- *
- * The program is aborted if the key already exists. */
+/* 尝试将键值对 key 和 val 添加到数据库中
+ * 调用者负责对 key 和 val 的引用计数进行增加
+ * 程序在键已经存在时会停止 */
 void dbAdd(redisDb *db, robj *key, robj *val) {
+    /* 复制键名 */
     sds copy = sdsdup(key->ptr);
+    /* 尝试添加键值对 */
     int retval = dictAdd(db->dict, copy, val);
-
+    /* 如果键已经存在，那么停止 */
     serverAssertWithInfo(NULL,key,retval == DICT_OK);
+    /* 将该键添加到server.ready_keys链表中，节点类型为ready-List */
     signalKeyAsReady(db, key, val->type);
+    /* 如果开启了集群模式，那么将键保存到槽里面 */
     if (server.cluster_enabled) slotToKeyAdd(key->ptr);
 }
 
@@ -1020,6 +1023,8 @@ void scanGenericCommand(client *c, robj *o, unsigned long cursor) {
          * it is possible to fetch more data in a type-dependent way. */
         privdata[0] = keys;
         privdata[1] = o;
+        /* 当dict底层过于稀疏时，需要遍历很多次才能取到预期的元素个数，
+         * 效率过低，故Redis设置了循环次数上限maxiterations */
         do {
             cursor = dictScan(ht, cursor, scanCallback, NULL, privdata);
         } while (cursor &&
@@ -1058,11 +1063,11 @@ void scanGenericCommand(client *c, robj *o, unsigned long cursor) {
         nextnode = listNextNode(node);
         int filter = 0;
 
-        /* Filter element if it does not match the pattern. */
+        /* 过滤不匹配pattern的元素 */
         if (use_pattern) {
             if (sdsEncodedObject(kobj)) {
                 if (!stringmatchlen(pat, patlen, kobj->ptr, sdslen(kobj->ptr), 0))
-                    filter = 1;
+                    filter = 1; /* 不匹配，过滤 */
             } else {
                 char buf[LONG_STR_SIZE];
                 int len;
@@ -1073,17 +1078,17 @@ void scanGenericCommand(client *c, robj *o, unsigned long cursor) {
             }
         }
 
-        /* Filter an element if it isn't the type we want. */
+        /* 过滤我们不想要的元素，即type不同需过滤 */
         if (!filter && o == NULL && typename){
             robj* typecheck = lookupKeyReadWithFlags(c->db, kobj, LOOKUP_NOTOUCH);
             char* type = getObjectTypeName(typecheck);
             if (strcasecmp((char*) typename, type)) filter = 1;
         }
 
-        /* Filter element if it is an expired key. */
+        /* 过滤已过期的元素 */
         if (!filter && o == NULL && expireIfNeeded(c->db, kobj)) filter = 1;
 
-        /* Remove the element and its associated value if needed. */
+        /* 移除被过滤的元素 */
         if (filter) {
             decrRefCount(kobj);
             listDelNode(keys, node);

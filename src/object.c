@@ -240,20 +240,21 @@ robj *createZiplistObject(void) {
     return o;
 }
 
+/* 创建set类型的对象，编码类型为hash */
 robj *createSetObject(void) {
     dict *d = dictCreate(&setDictType,NULL);
     robj *o = createObject(OBJ_SET,d);
     o->encoding = OBJ_ENCODING_HT;
     return o;
 }
-
+/* 创建set类型的对象，编码类型为intset */
 robj *createIntsetObject(void) {
     intset *is = intsetNew();
     robj *o = createObject(OBJ_SET,is);
     o->encoding = OBJ_ENCODING_INTSET;
     return o;
 }
-
+/* 创建hash类型的对象，编码类型为ziplist */
 robj *createHashObject(void) {
     unsigned char *zl = ziplistNew();
     robj *o = createObject(OBJ_HASH, zl);

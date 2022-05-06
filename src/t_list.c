@@ -221,50 +221,57 @@ robj *listTypeDup(robj *o) {
  * List Commands
  *----------------------------------------------------------------------------*/
 
-/* Implements LPUSH/RPUSH/LPUSHX/RPUSHX. 
- * 'xx': push if key exists. */
+/* push类命令的实现：LPUSH/RPUSH/LPUSHX/RPUSHX.
+ * 'xx' 表示如果key存在，才进行push. */
 void pushGenericCommand(client *c, int where, int xx) {
     int j;
-
+    /* 如果列表元素太多，则拒绝插入链表 */
     for (j = 2; j < c->argc; j++) {
         if (sdslen(c->argv[j]->ptr) > LIST_MAX_ITEM_SIZE) {
             addReplyError(c, "Element too large");
             return;
         }
     }
-
+    /* 取出列表对象，并检查是否是LIST类型 */
     robj *lobj = lookupKeyWrite(c->db, c->argv[1]);
     if (checkType(c,lobj,OBJ_LIST)) return;
     if (!lobj) {
         if (xx) {
+            /* 列表对象不存在，且PUSH存在NX属性，直接返回0 */
             addReply(c, shared.czero);
             return;
         }
-
+        /* 列表对象不存在，创建一个新的列表对象 */
         lobj = createQuicklistObject();
+        /* 设置quicklist属性，list节点大小和compress属性 */
         quicklistSetOptions(lobj->ptr, server.list_max_ziplist_size,
                             server.list_compress_depth);
+        /* 关联新的列表对象到数据库 */
         dbAdd(c->db,c->argv[1],lobj);
     }
-
+    /* 遍历所有输入值，并将它们添加到列表中 */
     for (j = 2; j < c->argc; j++) {
         listTypePush(lobj,c->argv[j],where);
         server.dirty++;
     }
-
+    /* 返回添加的节点数量 */
     addReplyLongLong(c, listTypeLength(lobj));
 
     char *event = (where == LIST_HEAD) ? "lpush" : "rpush";
+    /* 发送键修改信号 */
     signalModifiedKey(c,c->db,c->argv[1]);
+    /* 发送事件通知 */
     notifyKeyspaceEvent(NOTIFY_LIST,event,c->argv[1],c->db->id);
 }
 
-/* LPUSH <key> <element> [<element> ...] */
+/* LPUSH <key> <element> [<element> ...]
+ * lpush命令接口 */
 void lpushCommand(client *c) {
     pushGenericCommand(c,LIST_HEAD,0);
 }
 
-/* RPUSH <key> <element> [<element> ...] */
+/* RPUSH <key> <element> [<element> ...]
+ * rpush命令接口 */
 void rpushCommand(client *c) {
     pushGenericCommand(c,LIST_TAIL,0);
 }
@@ -279,14 +286,15 @@ void rpushxCommand(client *c) {
     pushGenericCommand(c,LIST_TAIL,1);
 }
 
-/* LINSERT <key> (BEFORE|AFTER) <pivot> <element> */
+/* LINSERT <key> (BEFORE|AFTER) <pivot> <element>
+ * 将值value插入到列表key，且位于值pivot之前或之后 */
 void linsertCommand(client *c) {
     int where;
     robj *subject;
     listTypeIterator *iter;
     listTypeEntry entry;
     int inserted = 0;
-
+    /* 解析before/after参数 */
     if (strcasecmp(c->argv[2]->ptr,"after") == 0) {
         where = LIST_TAIL;
     } else if (strcasecmp(c->argv[2]->ptr,"before") == 0) {
@@ -295,24 +303,26 @@ void linsertCommand(client *c) {
         addReplyErrorObject(c,shared.syntaxerr);
         return;
     }
-
+    /* 元素长度 */
     if (sdslen(c->argv[4]->ptr) > LIST_MAX_ITEM_SIZE) {
         addReplyError(c, "Element too large");
         return;
     }
-
+    /* 查找key对应的list对象，并检查其类型 */
     if ((subject = lookupKeyWriteOrReply(c,c->argv[1],shared.czero)) == NULL ||
         checkType(c,subject,OBJ_LIST)) return;
 
-    /* Seek pivot from head to tail */
+    /* 遍历quicklist，根据元素找到位置索引 */
     iter = listTypeInitIterator(subject,0,LIST_TAIL);
     while (listTypeNext(iter,&entry)) {
         if (listTypeEqual(&entry,c->argv[3])) {
+            /* 插入元素 */
             listTypeInsert(&entry,c->argv[4],where);
             inserted = 1;
             break;
         }
     }
+    /* 释放迭代器 */
     listTypeReleaseIterator(iter);
 
     if (inserted) {
@@ -329,14 +339,16 @@ void linsertCommand(client *c) {
     addReplyLongLong(c,listTypeLength(subject));
 }
 
-/* LLEN <key> */
+/* LLEN <key>
+ * 获取列表长度（元素数目） */
 void llenCommand(client *c) {
     robj *o = lookupKeyReadOrReply(c,c->argv[1],shared.czero);
     if (o == NULL || checkType(c,o,OBJ_LIST)) return;
     addReplyLongLong(c,listTypeLength(o));
 }
 
-/* LINDEX <key> <index> */
+/* LINDEX <key> <index>
+ * lindex命令接口 */
 void lindexCommand(client *c) {
     robj *o = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp]);
     if (o == NULL || checkType(c,o,OBJ_LIST)) return;
@@ -347,6 +359,7 @@ void lindexCommand(client *c) {
 
     if (o->encoding == OBJ_ENCODING_QUICKLIST) {
         quicklistEntry entry;
+        /* 调用quicklist index接口 */
         if (quicklistIndex(o->ptr, index, &entry)) {
             if (entry.value) {
                 addReplyBulkCBuffer(c, entry.value, entry.sz);
@@ -361,7 +374,8 @@ void lindexCommand(client *c) {
     }
 }
 
-/* LSET <key> <index> <element> */
+/* LSET <key> <index> <element>
+ * 设置指定索引位置的元素值 */
 void lsetCommand(client *c) {
     robj *o = lookupKeyWriteOrReply(c,c->argv[1],shared.nokeyerr);
     if (o == NULL || checkType(c,o,OBJ_LIST)) return;
@@ -378,9 +392,11 @@ void lsetCommand(client *c) {
 
     if (o->encoding == OBJ_ENCODING_QUICKLIST) {
         quicklist *ql = o->ptr;
+        /* 设置指定位置元素 */
         int replaced = quicklistReplaceAtIndex(ql, index,
                                                value->ptr, sdslen(value->ptr));
         if (!replaced) {
+            /* 修改失败会返回错误提示“-ERR index out of range\r\n” */
             addReplyErrorObject(c,shared.outofrangeerr);
         } else {
             addReply(c,shared.ok);
@@ -399,15 +415,17 @@ void lsetCommand(client *c) {
  * argument is set to a non-zero value, the reply is reversed so that elements
  * are returned from end to start. */
 void addListRangeReply(client *c, robj *o, long start, long end, int reverse) {
+    /* 取出列表长度 */
     long rangelen, llen = listTypeLength(o);
 
-    /* Convert negative indexes. */
+    /* 将负数索引转换成正数索引 */
     if (start < 0) start = llen+start;
     if (end < 0) end = llen+end;
     if (start < 0) start = 0;
 
     /* Invariant: start >= 0, so this test will be true when end < 0.
      * The range is empty when start > end or start >= length. */
+    /* start/end取值范围error，直接return */
     if (start > end || start >= llen) {
         addReply(c,shared.emptyarray);
         return;
@@ -420,8 +438,9 @@ void addListRangeReply(client *c, robj *o, long start, long end, int reverse) {
     if (o->encoding == OBJ_ENCODING_QUICKLIST) {
         int from = reverse ? end : start;
         int direction = reverse ? LIST_HEAD : LIST_TAIL;
+        /* 初始化一个范围迭代器 */
         listTypeIterator *iter = listTypeInitIterator(o,from,direction);
-
+        /* 遍历迭代器，获取list元素对象并写入回复缓冲区 */
         while(rangelen--) {
             listTypeEntry entry;
             listTypeNext(iter, &entry);
@@ -432,6 +451,7 @@ void addListRangeReply(client *c, robj *o, long start, long end, int reverse) {
                 addReplyBulkLongLong(c,qe->longval);
             }
         }
+        /* 释放迭代器 */
         listTypeReleaseIterator(iter);
     } else {
         serverPanic("Unknown list encoding");
@@ -455,29 +475,31 @@ void listElementsRemoved(client *c, robj *key, int where, robj *o, long count) {
  * The where argument specifies which end of the list is operated on. An
  * optional count may be provided as the third argument of the client's
  * command. */
+/* list pop命令实现 */
 void popGenericCommand(client *c, int where) {
     long count = 0;
     robj *value;
-
+    /* 命令参数个数校验 */
     if (c->argc > 3) {
         addReplyErrorFormat(c,"wrong number of arguments for '%s' command",
                             c->cmd->name);
         return;
     } else if (c->argc == 3) {
-        /* Parse the optional count argument. */
+        /* 解析可选的count参数 */
         if (getPositiveLongFromObjectOrReply(c,c->argv[2],&count,NULL) != C_OK) 
             return;
+        /* 如果count为0，不pop，直接返回 */
         if (count == 0) {
             /* Fast exit path. */
             addReplyNullArray(c);
             return;
         }
     }
-
+    /* 取出list对象 */
     robj *o = lookupKeyWriteOrReply(c, c->argv[1], shared.null[c->resp]);
     if (o == NULL || checkType(c, o, OBJ_LIST))
         return;
-
+    /* 如果count为0，pop一个元素即可 */
     if (!count) {
         /* Pop a single element. This is POP's original behavior that replies
          * with a bulk string. */
@@ -489,43 +511,50 @@ void popGenericCommand(client *c, int where) {
     } else {
         /* Pop a range of elements. An addition to the original POP command,
          *  which replies with a multi-bulk. */
+        /* 如果count不为0，组装范围参数，批量删除元素 */
         long llen = listTypeLength(o);
         long rangelen = (count > llen) ? llen : count;
         long rangestart = (where == LIST_HEAD) ? 0 : -rangelen;
         long rangeend = (where == LIST_HEAD) ? rangelen - 1 : -1;
         int reverse = (where == LIST_HEAD) ? 0 : 1;
-
+        /* 响应客户端 */
         addListRangeReply(c,o,rangestart,rangeend,reverse);
+        /* 批量删除元素 */
         quicklistDelRange(o->ptr,rangestart,rangelen);
+        /* 发送事件通知 */
         listElementsRemoved(c,c->argv[1],where,o,rangelen);
     }
 }
 
-/* LPOP <key> [count] */
+/* LPOP <key> [count]
+ * lpop命令接口 */
 void lpopCommand(client *c) {
     popGenericCommand(c,LIST_HEAD);
 }
 
-/* RPOP <key> [count] */
+/* RPOP <key> [count]
+ * rpop命令接口 */
 void rpopCommand(client *c) {
     popGenericCommand(c,LIST_TAIL);
 }
 
-/* LRANGE <key> <start> <stop> */
+/* LRANGE <key> <start> <stop>
+ * 获取指定索引范围内的所有元素 */
 void lrangeCommand(client *c) {
     robj *o;
     long start, end;
-
+    /* 获取start & end参数 */
     if ((getLongFromObjectOrReply(c, c->argv[2], &start, NULL) != C_OK) ||
         (getLongFromObjectOrReply(c, c->argv[3], &end, NULL) != C_OK)) return;
-
+    /* 查找list对象 */
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptyarray)) == NULL
          || checkType(c,o,OBJ_LIST)) return;
-
+    /* lrange命令的具体实现 */
     addListRangeReply(c,o,start,end,0);
 }
 
-/* LTRIM <key> <start> <stop> */
+/* LTRIM <key> <start> <stop>
+ * 裁剪列表，只保留区间start与stop内的元素 */
 void ltrimCommand(client *c) {
     robj *o;
     long start, end, llen, ltrim, rtrim;
@@ -556,8 +585,8 @@ void ltrimCommand(client *c) {
 
     /* Remove list elements to perform the trim */
     if (o->encoding == OBJ_ENCODING_QUICKLIST) {
-        quicklistDelRange(o->ptr,0,ltrim);
-        quicklistDelRange(o->ptr,-rtrim,rtrim);
+        quicklistDelRange(o->ptr, 0, ltrim);      /* 左侧trim*/
+        quicklistDelRange(o->ptr, -rtrim, rtrim); /* 右侧trim */
     } else {
         serverPanic("Unknown list encoding");
     }
@@ -688,18 +717,23 @@ void lposCommand(client *c) {
     }
 }
 
-/* LREM <key> <count> <element> */
+/* LREM <key> <count> <element>
+ * 移除列表中与参数value相等的元素，并返回被移除的元素数目
+ * 当count大于0时，从表头开始向表尾搜索，最大删除count个元素
+ * 当count小于0时，从表尾开始向表头搜索，最大删除“count绝对值”个元素
+ * 当count等于0时，删除所有与value相等的元素
+ */
 void lremCommand(client *c) {
     robj *subject, *obj;
     obj = c->argv[3];
     long toremove;
     long removed = 0;
-
+    /* 参数校验 */
     if (sdslen(obj->ptr) > LIST_MAX_ITEM_SIZE) {
         addReplyError(c, "Element too large");
         return;
     }
-
+    /* 获取待删除的count值 */
     if ((getLongFromObjectOrReply(c, c->argv[2], &toremove, NULL) != C_OK))
         return;
 
@@ -707,19 +741,21 @@ void lremCommand(client *c) {
     if (subject == NULL || checkType(c,subject,OBJ_LIST)) return;
 
     listTypeIterator *li;
+    /* 迭代方向 */
     if (toremove < 0) {
         toremove = -toremove;
         li = listTypeInitIterator(subject,-1,LIST_HEAD);
     } else {
         li = listTypeInitIterator(subject,0,LIST_TAIL);
     }
-
+    /* 遍历删除元素 */
     listTypeEntry entry;
     while (listTypeNext(li,&entry)) {
         if (listTypeEqual(&entry,obj)) {
             listTypeDelete(li, &entry);
             server.dirty++;
             removed++;
+            /* 删除元素个数控制 */
             if (toremove && removed == toremove) break;
         }
     }
@@ -930,33 +966,40 @@ int serveClientBlockedOnList(client *receiver, robj *key, robj *dstkey, redisDb 
     return C_OK;
 }
 
-/* Blocking RPOP/LPOP */
+/* Blocking RPOP/LPOP
+ * 阻塞版本的POP：即当列表对象不存在，会阻塞客户端 */
 void blockingPopGenericCommand(client *c, int where) {
     robj *o;
     mstime_t timeout;
     int j;
-
+    /* 取出 timeout 参数 */
     if (getTimeoutFromObjectOrReply(c,c->argv[c->argc-1],&timeout,UNIT_SECONDS)
         != C_OK) return;
-
+    /* 遍历所有列表键 */
     for (j = 1; j < c->argc-1; j++) {
+        /* 取出所有键对应的list对象 */
         o = lookupKeyWrite(c->db,c->argv[j]);
+        /* 是否空list */
         if (o != NULL) {
+            /* 检查是否list类型的对象 */
             if (checkType(c,o,OBJ_LIST)) {
                 return;
             } else {
+                /* 列表元素个数不为0 */
                 if (listTypeLength(o) != 0) {
                     /* Non empty list, this is like a normal [LR]POP. */
+                    /* 弹出值 */
                     robj *value = listTypePop(o,where);
                     serverAssert(value != NULL);
-
+                    /* 响应client */
                     addReplyArrayLen(c,2);
                     addReplyBulk(c,c->argv[j]);
                     addReplyBulk(c,value);
                     decrRefCount(value);
+                    /* 删除元素 */
                     listElementsRemoved(c,c->argv[j],where,o,1);
 
-                    /* Replicate it as an [LR]POP instead of B[LR]POP. */
+                    /* 传播一个 [LR]POP 而不是 B[LR]POP */
                     rewriteClientCommandVector(c,2,
                         (where == LIST_HEAD) ? shared.lpop : shared.rpop,
                         c->argv[j]);
@@ -966,24 +1009,26 @@ void blockingPopGenericCommand(client *c, int where) {
         }
     }
 
-    /* If we are not allowed to block the client, the only thing
-     * we can do is treating it as a timeout (even with timeout 0). */
+    /* 如果不允许阻止客户端，
+     * 唯一能做的就是将其视为超时（即使超时为 0） */
     if (c->flags & CLIENT_DENY_BLOCKING) {
         addReplyNullArray(c);
         return;
     }
 
-    /* If the keys do not exist we must block */
+    /* 所有输入列表键都不存在，只能阻塞了 */
     struct listPos pos = {where};
     blockForKeys(c,BLOCKED_LIST,c->argv + 1,c->argc - 2,timeout,NULL,&pos,NULL);
 }
 
-/* BLPOP <key> [<key> ...] <timeout> */
+/* BLPOP <key> [<key> ...] <timeout>
+ * 阻塞版本的POP：即当列表对象不存在，会阻塞客户端 */
 void blpopCommand(client *c) {
     blockingPopGenericCommand(c,LIST_HEAD);
 }
 
-/* BLPOP <key> [<key> ...] <timeout> */
+/* BLPOP <key> [<key> ...] <timeout>
+ * 阻塞版本的POP：即当列表对象不存在，会阻塞客户端 */
 void brpopCommand(client *c) {
     blockingPopGenericCommand(c,LIST_TAIL);
 }

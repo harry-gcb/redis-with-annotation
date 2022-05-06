@@ -147,8 +147,8 @@ void quicklistSetFill(quicklist *quicklist, int fill)
 /* 设置填充属性和压缩属性 */
 void quicklistSetOptions(quicklist *quicklist, int fill, int depth)
 {
-    quicklistSetFill(quicklist, fill);
-    quicklistSetCompressDepth(quicklist, depth);
+    quicklistSetFill(quicklist, fill);           /* 节点占用内存大小 */
+    quicklistSetCompressDepth(quicklist, depth); /* compress属性 */
 }
 
 /* Create a new quicklist with some default parameters. */
