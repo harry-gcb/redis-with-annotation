@@ -927,15 +927,20 @@ void sinterGenericCommand(client *c, robj **setkeys,
     int encoding, empty = 0;
 
     for (j = 0; j < setnum; j++) {
+        /* 取出集合对象
+         * 如果dstkey存在，则会进行写操作（sinterstore命令）
+         * 否则为读操作（sinter命令）*/
         robj *setobj = dstkey ?
             lookupKeyWrite(c->db,setkeys[j]) :
             lookupKeyRead(c->db,setkeys[j]);
+        /* 对象不存在，将其设置为null */
         if (!setobj) {
             /* A NULL is considered an empty set */
             empty += 1;
             sets[j] = NULL;
             continue;
         }
+        /* 检查对象类型是否为SET */
         if (checkType(c,setobj,OBJ_SET)) {
             zfree(sets);
             return;
@@ -943,11 +948,11 @@ void sinterGenericCommand(client *c, robj **setkeys,
         sets[j] = setobj;
     }
 
-    /* Set intersection with an empty set always results in an empty set.
-     * Return ASAP if there is an empty set. */
+    /* 集合与空集的交集总是产生一个空集，如果有空集，尽快返回 */
     if (empty > 0) {
         zfree(sets);
         if (dstkey) {
+            /* 如果dstkey存在，删除此对象 */
             if (dbDelete(c->db,dstkey)) {
                 signalModifiedKey(c,c->db,dstkey);
                 notifyKeyspaceEvent(NOTIFY_GENERIC,"del",dstkey,c->db->id);
@@ -960,8 +965,7 @@ void sinterGenericCommand(client *c, robj **setkeys,
         return;
     }
 
-    /* Sort sets from the smallest to largest, this will improve our
-     * algorithm's performance */
+    /* 按元素个数从小到大排序集合，这将提高我们算法的性能 */
     qsort(sets,setnum,sizeof(robj*),qsortCompareSetsByCardinality);
 
     /* The first thing we should output is the total number of elements...
@@ -970,30 +974,33 @@ void sinterGenericCommand(client *c, robj **setkeys,
      * to the output list and save the pointer to later modify it with the
      * right length */
     if (!dstkey) {
+        /* 响应长度 */
         replylen = addReplyDeferredLen(c);
     } else {
-        /* If we have a target key where to store the resulting set
-         * create this key with an empty set inside */
+        /* 如果我们有一个目标键来存储结果集，创建这个键的空集 */
         dstset = createIntsetObject();
     }
 
     /* Iterate all the elements of the first (smallest) set, and test
      * the element against all the other sets, if at least one set does
-     * not include the element it is discarded */
+     * not include the element it is discarded
+     * 遍历元素最少的集合中的所有元素，依次判断该元素是否在其余所有集合中：
+     * 如果不在任一集合，舍弃该元素，否则加入结果集 */
     si = setTypeInitIterator(sets[0]);
     while((encoding = setTypeNext(si,&elesds,&intobj)) != -1) {
         for (j = 1; j < setnum; j++) {
             if (sets[j] == sets[0]) continue;
+            /* 集合的编码类型为INTSET */
             if (encoding == OBJ_ENCODING_INTSET) {
-                /* intset with intset is simple... and fast */
+                /* 带 intset 的 intset 很简单......而且速度很快 */
                 if (sets[j]->encoding == OBJ_ENCODING_INTSET &&
                     !intsetFind((intset*)sets[j]->ptr,intobj))
                 {
                     break;
-                /* in order to compare an integer with an object we
-                 * have to use the generic function, creating an object
-                 * for this */
+                    /* 为了将整数与对象进行比较，
+                     * 我们必须使用泛型函数，为此创建一个对象 */
                 } else if (sets[j]->encoding == OBJ_ENCODING_HT) {
+                    /* 将int转换为sds obj */
                     elesds = sdsfromlonglong(intobj);
                     if (!setTypeIsMember(sets[j],elesds)) {
                         sdsfree(elesds);
@@ -1008,7 +1015,8 @@ void sinterGenericCommand(client *c, robj **setkeys,
             }
         }
 
-        /* Only take action when all sets contain the member */
+        /* 仅当所有集合都包含该成员时才采取行动
+         * 所有集合都存在该元素，则将该元素加入结果集 */
         if (j == setnum) {
             if (!dstkey) {
                 if (encoding == OBJ_ENCODING_HT)
@@ -1030,9 +1038,9 @@ void sinterGenericCommand(client *c, robj **setkeys,
     setTypeReleaseIterator(si);
 
     if (dstkey) {
-        /* Store the resulting set into the target, if the intersection
-         * is not an empty set. */
+        /* 如果交集不是空集，则将结果集存储到目标中。 */
         if (setTypeSize(dstset) > 0) {
+            /* 指定key里有元素的话，直接覆盖 */
             setKey(c,c->db,dstkey,dstset);
             addReplyLongLong(c,setTypeSize(dstset));
             notifyKeyspaceEvent(NOTIFY_SET,"sinterstore",
@@ -1040,6 +1048,7 @@ void sinterGenericCommand(client *c, robj **setkeys,
             server.dirty++;
         } else {
             addReply(c,shared.czero);
+            /* 交集为空的话，则目标集合会变成一个空集合，直接删除 */
             if (dbDelete(c->db,dstkey)) {
                 server.dirty++;
                 signalModifiedKey(c,c->db,dstkey);
@@ -1069,6 +1078,7 @@ void sinterstoreCommand(client *c) {
 #define SET_OP_DIFF 1
 #define SET_OP_INTER 2
 
+/* 并集/差集 的实现函数 */
 void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
                               robj *dstkey, int op) {
     robj **sets = zmalloc(sizeof(robj*)*setnum);
@@ -1077,7 +1087,7 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
     sds ele;
     int j, cardinality = 0;
     int diff_algo = 1;
-
+    /* 遍历所有输入的集合，获取所有的元素 */
     for (j = 0; j < setnum; j++) {
         robj *setobj = dstkey ?
             lookupKeyWrite(c->db,setkeys[j]) :
@@ -1095,11 +1105,12 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
 
     /* Select what DIFF algorithm to use.
      *
-     * Algorithm 1 is O(N*M) where N is the size of the element first set
-     * and M the total number of sets.
+     * 策略一：将A集合中元素在B1……Bn集合间一一查找，
+     * 将查找不到的元素加入结果集。复杂度为O(M*n)
      *
-     * Algorithm 2 is O(N) where N is the total number of elements in all
-     * the sets.
+     * 策略二：先将A集合加入结果集，
+     * 再将B1……Bn集合中的所有元素在结果集中一一查找，
+     * 将查到的元素从结果集中删除。复杂度为O(N)
      *
      * We compute what is the best bet with the current input here. */
     if (op == SET_OP_DIFF && sets[0]) {
@@ -1112,17 +1123,21 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
             algo_two_work += setTypeSize(sets[j]);
         }
 
-        /* Algorithm 1 has better constant times and performs less operations
-         * if there are elements in common. Give it some advantage. */
+        /* 在算法选择时，大的逻辑是：
+         * 如果A集合比较小，遍历A更划算；反之遍历其余集合更划算
+         */
         algo_one_work /= 2;
         diff_algo = (algo_one_work <= algo_two_work) ? 1 : 2;
-
+        /* 看策略选择部分，algo_X_work代表了该策略的权重，分值越小代表效率越高。
+         * set[0]的基数越小，策略一越好。
+         * 最终比较的是set[0]的基数和其余集合的平均基数 */
         if (diff_algo == 1 && setnum > 1) {
             /* With algorithm 1 it is better to order the sets to subtract
              * by decreasing size, so that we are more likely to find
              * duplicated elements ASAP. */
-            qsort(sets+1,setnum-1,sizeof(robj*),
-                qsortCompareSetsByRevCardinality);
+            /* 求差集时，按基数大小对给定集合进行降序排序 */
+            qsort(sets + 1, setnum - 1, sizeof(robj *),
+                  qsortCompareSetsByRevCardinality);
         }
     }
 
@@ -1135,8 +1150,10 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
         /* Union is trivial, just add every element of every set to the
          * temporary set. */
         for (j = 0; j < setnum; j++) {
-            if (!sets[j]) continue; /* non existing keys are like empty sets */
-
+            /* 跳过空集 */
+            if (!sets[j]) continue;
+            /* 遍历所有集合，调用setTypeAdd将所有元素依次插入结果集，
+             * 插入过程中会去重，自然得到并集 */
             si = setTypeInitIterator(sets[j]);
             while((ele = setTypeNextObject(si)) != NULL) {
                 if (setTypeAdd(dstset,ele)) cardinality++;
@@ -1152,16 +1169,22 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
          * into all the other sets.
          *
          * This way we perform at max N*M operations, where N is the size of
-         * the first set, and M the number of sets. */
+         * the first set, and M the number of sets.
+         * 策略一求差集
+         * 将A集合中元素在B1……Bn集合间一一查找，
+         * 将查找不到的元素加入结果集。复杂度为O(M*n)*/
         si = setTypeInitIterator(sets[0]);
+        /* 迭代集合A */
         while((ele = setTypeNextObject(si)) != NULL) {
+            /* 遍历其余集合 */
             for (j = 1; j < setnum; j++) {
-                if (!sets[j]) continue; /* no key is an empty set. */
-                if (sets[j] == sets[0]) break; /* same set! */
-                if (setTypeIsMember(sets[j],ele)) break;
+                if (!sets[j]) continue;        /* 跳过空集 */
+                if (sets[j] == sets[0]) break; /* 跳过本身 */
+                if (setTypeIsMember(sets[j], ele))
+                    break; /* 元素在比较集合中，抛弃该元素 */
             }
             if (j == setnum) {
-                /* There is no other set with this element. Add it. */
+                /* 全部比较完成后，其他集合都不存在该元素，则该元素为差集元素 */
                 setTypeAdd(dstset,ele);
                 cardinality++;
             }
@@ -1175,29 +1198,36 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
          * Then remove all the elements of all the next sets from it.
          *
          * This is O(N) where N is the sum of all the elements in every
-         * set. */
+         * set.
+         * 算法二求差集
+         * 策略二：先将A集合加入结果集，
+         * 再将B1……Bn集合中的所有元素在结果集中一一查找，
+         * 将查到的元素从结果集中删除。复杂度为O(N)*/
         for (j = 0; j < setnum; j++) {
-            if (!sets[j]) continue; /* non existing keys are like empty sets */
+            if (!sets[j]) continue; /* 跳过空集 */
 
             si = setTypeInitIterator(sets[j]);
             while((ele = setTypeNextObject(si)) != NULL) {
                 if (j == 0) {
+                    /* 先将A集合加入结果集 */
                     if (setTypeAdd(dstset,ele)) cardinality++;
                 } else {
+                    /* 将在集合A中，且在其余集合中的元素从结果集中移除 */
                     if (setTypeRemove(dstset,ele)) cardinality--;
                 }
                 sdsfree(ele);
             }
             setTypeReleaseIterator(si);
 
-            /* Exit if result set is empty as any additional removal
-             * of elements will have no effect. */
+            /* 如果结果集为空，则退出，因为任何额外的元素删除都将无效
+             * 即结果集已经被删成空集了 */
             if (cardinality == 0) break;
         }
     }
 
     /* Output the content of the resulting set, if not in STORE mode */
     if (!dstkey) {
+        /* 如果不在 STORE 模式下，则输出结果集的内容 */
         addReplySetLen(c,cardinality);
         si = setTypeInitIterator(dstset);
         while((ele = setTypeNextObject(si)) != NULL) {
@@ -1208,8 +1238,7 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
         server.lazyfree_lazy_server_del ? freeObjAsync(NULL, dstset) :
                                           decrRefCount(dstset);
     } else {
-        /* If we have a target key where to store the resulting set
-         * create this key with the result set inside */
+        /* 目标集合（并集）不为空，覆盖目标集合 */
         if (setTypeSize(dstset) > 0) {
             setKey(c,c->db,dstkey,dstset);
             addReplyLongLong(c,setTypeSize(dstset));
@@ -1219,6 +1248,7 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
             server.dirty++;
         } else {
             addReply(c,shared.czero);
+            /* 目标集合（并集）为空集，删除目标集合 */
             if (dbDelete(c->db,dstkey)) {
                 server.dirty++;
                 signalModifiedKey(c,c->db,dstkey);
@@ -1230,7 +1260,8 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
     zfree(sets);
 }
 
-/* SUNION key [key ...] */
+/* SUNION key [key ...]
+ * 回一个集合的全部成员，该集合是所有给定集合的并集。不存在的key被视为空集 */
 void sunionCommand(client *c) {
     sunionDiffGenericCommand(c,c->argv+1,c->argc-1,NULL,SET_OP_UNION);
 }
@@ -1240,12 +1271,14 @@ void sunionstoreCommand(client *c) {
     sunionDiffGenericCommand(c,c->argv+2,c->argc-2,c->argv[1],SET_OP_UNION);
 }
 
-/* SDIFF key [key ...] */
+/* SDIFF key [key ...]
+ * 返回一个集合的全部成员，该集合是所有给定集合之间的差集 */
 void sdiffCommand(client *c) {
     sunionDiffGenericCommand(c,c->argv+1,c->argc-1,NULL,SET_OP_DIFF);
 }
 
-/* SDIFFSTORE destination key [key ...] */
+/* SDIFFSTORE destination key [key ...]
+ * 返回一个集合的全部成员，该集合是所有给定集合之间的差集 */
 void sdiffstoreCommand(client *c) {
     sunionDiffGenericCommand(c,c->argv+2,c->argc-2,c->argv[1],SET_OP_DIFF);
 }

@@ -339,19 +339,23 @@ struct redisCommand redisCommandTable[] = {
     /* 求多集合的交集 */
     {"sinter", sinterCommand, -2, "read-only to-sort @set", 0, NULL, 1, -1, 1,
      0, 0, 0},
-
+    /* sinterstore命令与sinter命令类似，
+     * 不同之处在于它将结果保存至指定集合，而不是简单返回 */
     {"sinterstore", sinterstoreCommand, -3, "write use-memory @set", 0, NULL, 1,
      -1, 1, 0, 0, 0},
-
+    /* 返回一个集合的全部成员，该集合是所有给定集合的并集。不存在的key被视为空集
+     */
     {"sunion", sunionCommand, -2, "read-only to-sort @set", 0, NULL, 1, -1, 1,
      0, 0, 0},
-
+    /* sunionstore命令与sunion命令类似，
+     * 不同之处在于它将结果保存至指定集合，而不是简单返回 */
     {"sunionstore", sunionstoreCommand, -3, "write use-memory @set", 0, NULL, 1,
      -1, 1, 0, 0, 0},
-
+    /* 求集合间的差集 */
     {"sdiff", sdiffCommand, -2, "read-only to-sort @set", 0, NULL, 1, -1, 1, 0,
      0, 0},
-
+    /* sdiffstore命令与sdiff命令类似，
+     * 不同之处在于它将结果保存至指定集合，而不是简单返回 */
     {"sdiffstore", sdiffstoreCommand, -3, "write use-memory @set", 0, NULL, 1,
      -1, 1, 0, 0, 0},
     /* 返回集合key中的所有成员。不存在的key被视为空集合 */
