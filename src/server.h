@@ -2270,17 +2270,17 @@ void ACLUpdateDefaultUserPassword(sds password);
 
 /* Input flags. */
 #define ZADD_IN_NONE 0
-#define ZADD_IN_INCR (1 << 0) /* Increment the score instead of setting it. */
-#define ZADD_IN_NX (1 << 1)   /* Don't touch elements not already existing. */
-#define ZADD_IN_XX (1 << 2)   /* Only touch elements already existing. */
-#define ZADD_IN_GT (1 << 3)   /* Only update existing when new scores are higher. */
-#define ZADD_IN_LT (1 << 4)   /* Only update existing when new scores are lower. */
+#define ZADD_IN_INCR (1 << 0) /* 表示对score进行增加，而不是更新 */
+#define ZADD_IN_NX (1 << 1) /* 不更新已存在的元素，仅添加新元素，对应NX参数 */
+#define ZADD_IN_XX (1 << 2) /* 仅更新已存在的元素，不添加新元素，对应XX参数 */
+#define ZADD_IN_GT (1 << 3) /* 仅在新分数更高时更新现有元素，对应GT参数 */
+#define ZADD_IN_LT (1 << 4) /* 仅在新分数更低时更新现有元素，对应LT参数 */
 
-/* Output flags. */
-#define ZADD_OUT_NOP (1 << 0)     /* Operation not performed because of conditionals.*/
-#define ZADD_OUT_NAN (1 << 1)     /* Only touch elements already existing. */
-#define ZADD_OUT_ADDED (1 << 2)   /* The element was new and was added. */
-#define ZADD_OUT_UPDATED (1 << 3) /* The element already existed, score updated. */
+/* 输出标志位 */
+#define ZADD_OUT_NOP (1 << 0) /* 由于参数或条件不满足，未执行操作*/
+#define ZADD_OUT_NAN (1 << 1)     /* 只接触已经存在的元素 */
+#define ZADD_OUT_ADDED (1 << 2)   /* 添加了新元素 */
+#define ZADD_OUT_UPDATED (1 << 3) /* 元素存在，只更新了分数 */
 
 /* Struct to hold an inclusive/exclusive range spec by score comparison. */
 typedef struct

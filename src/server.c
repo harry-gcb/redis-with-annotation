@@ -364,28 +364,30 @@ struct redisCommand redisCommandTable[] = {
     /* 增量遍历集合元素 */
     {"sscan", sscanCommand, -3, "read-only random @set", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
+    /* 将一个或多个member元素及其分值score加入到有序集合对应的key当中 */
     {"zadd", zaddCommand, -4, "write use-memory fast @sortedset", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 在有序集合key的member的分值上增加increment */
     {"zincrby", zincrbyCommand, 4, "write use-memory fast @sortedset", 0, NULL,
      1, 1, 1, 0, 0, 0},
-
+    /* 删除有序集合key中的一个或者多个member */
     {"zrem", zremCommand, -3, "write fast @sortedset", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
+    /* 移除有序集key中所有score值介于[min, max]区间的成员 */
     {"zremrangebyscore", zremrangebyscoreCommand, 4, "write @sortedset", 0,
      NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 移除有序集key中指定排名区间内的所有成员 */
     {"zremrangebyrank", zremrangebyrankCommand, 4, "write @sortedset", 0, NULL,
      1, 1, 1, 0, 0, 0},
-
+    /* 移除该集合中成员介于min和max范围内（字典序）的所有元素 */
     {"zremrangebylex", zremrangebylexCommand, 4, "write @sortedset", 0, NULL, 1,
      1, 1, 0, 0, 0},
-
+    /* 计算给定的一个或多个（数量由numkeys指定）有序集的并集，
+     * 将结果存储到destination中。
+     * 结果集中某个成员的score值默认是所有给定集下该成员score值之和*/
     {"zunionstore", zunionstoreCommand, -4, "write use-memory @sortedset", 0,
      zunionInterDiffStoreGetKeys, 1, 1, 1, 0, 0, 0},
-
+    /* 跟zunionstore类似，唯一的区别是本命令用来求交集 */
     {"zinterstore", zinterstoreCommand, -4, "write use-memory @sortedset", 0,
      zunionInterDiffStoreGetKeys, 1, 1, 1, 0, 0, 0},
 
@@ -400,49 +402,54 @@ struct redisCommand redisCommandTable[] = {
 
     {"zdiff", zdiffCommand, -3, "read-only @sortedset", 0,
      zunionInterDiffGetKeys, 0, 0, 0, 0, 0, 0},
-
+    /* 获取有序集合key中指定区间的成员，成员按照分值递增排序，
+     * 如果分值相同，成员按照字典序排序 */
     {"zrange", zrangeCommand, -4, "read-only @sortedset", 0, NULL, 1, 1, 1, 0,
      0, 0},
 
     {"zrangestore", zrangestoreCommand, -5, "write use-memory @sortedset", 0,
      NULL, 1, 2, 1, 0, 0, 0},
-
+    /* 返回有序集key中，所有score值介于min和max之间（包括等于min或max）的成员 */
     {"zrangebyscore", zrangebyscoreCommand, -4, "read-only @sortedset", 0, NULL,
      1, 1, 1, 0, 0, 0},
-
+    /* 除了有序集合按score值递减之外，跟zrangebyscore完全一样 */
     {"zrevrangebyscore", zrevrangebyscoreCommand, -4, "read-only @sortedset", 0,
      NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 返回给定的有序集合键key中值介于min和max之间的成员，根据成员的字典序排序
+     * 合法的min和max参数必须包含“(”或者“[”，其中“(”表示开区间，“[”表示闭区间 */
     {"zrangebylex", zrangebylexCommand, -4, "read-only @sortedset", 0, NULL, 1,
      1, 1, 0, 0, 0},
 
     {"zrevrangebylex", zrevrangebylexCommand, -4, "read-only @sortedset", 0,
      NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 返回有序集key中score值在[min, max]区间的成员的数量 */
     {"zcount", zcountCommand, 4, "read-only fast @sortedset", 0, NULL, 1, 1, 1,
      0, 0, 0},
-
+    /* 返回给定的有序集合键key中值介于min和max之间的成员数量
+     * 合法的min和max参数必须包含“(”或者“[”，其中“(”表示开区间，“[”表示闭区间 */
     {"zlexcount", zlexcountCommand, 4, "read-only fast @sortedset", 0, NULL, 1,
      1, 1, 0, 0, 0},
-
+    /* 跟zrange相反，获取有序集合key中指定区间的成员，
+     * 成员按照分值递减排序，如果分值相同，成员按照字典序排序 */
     {"zrevrange", zrevrangeCommand, -4, "read-only @sortedset", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 获取有序集合key中的基数，不存在的key，返回0 */
     {"zcard", zcardCommand, 2, "read-only fast @sortedset", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 获取有序集合key中成员member的分值，返回值为字符串 */
     {"zscore", zscoreCommand, 3, "read-only fast @sortedset", 0, NULL, 1, 1, 1,
      0, 0, 0},
 
     {"zmscore", zmscoreCommand, -3, "read-only fast @sortedset", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 按照分值从小到大返回有序集合成员member的排名，其中排名从0开始计算 */
     {"zrank", zrankCommand, 3, "read-only fast @sortedset", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 跟zrank类似，唯一区别是按照从大到小返回member的排名 */
     {"zrevrank", zrevrankCommand, 3, "read-only fast @sortedset", 0, NULL, 1, 1,
      1, 0, 0, 0},
-
+    /* 迭代有序集合中的元素成员和分值，
+     * 其中cursor是游标，MATCH中可以通过正则来匹配元素，count是返回的元素数量 */
     {"zscan", zscanCommand, -3, "read-only random @sortedset", 0, NULL, 1, 1, 1,
      0, 0, 0},
 

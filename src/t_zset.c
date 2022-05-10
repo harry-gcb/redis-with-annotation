@@ -1052,7 +1052,8 @@ int zzlCompareElements(unsigned char *eptr, unsigned char *cstr, unsigned int cl
         return vlen - clen;
     return cmp;
 }
-
+/* 因为ziplist中存储的是key/value对，所以有序列表的基数值为
+ * ziplistLen()/2*/
 unsigned int zzlLength(unsigned char *zl)
 {
     return ziplistLen(zl) / 2;
@@ -1492,7 +1493,9 @@ unsigned char *zzlDeleteRangeByRank(unsigned char *zl, unsigned int start, unsig
 /*-----------------------------------------------------------------------------
  * Common sorted set API
  *----------------------------------------------------------------------------*/
-
+/* 根据存储类型，分别计算length
+ * 对于ziplist，使用zzlLength计算ziplist的长度
+ * 对于skiplist，直接使用skiplist中的length即可 */
 unsigned long zsetLength(const robj *zobj)
 {
     unsigned long length = 0;
@@ -1649,10 +1652,9 @@ int zsetScore(robj *zobj, sds member, double *score)
  *            assume 0 as previous score.
  * ZADD_NX:   Perform the operation only if the element does not exist.
  * ZADD_XX:   Perform the operation only if the element already exist.
- * ZADD_GT:   Perform the operation on existing elements only if the new score is
- *            greater than the current score.
- * ZADD_LT:   Perform the operation on existing elements only if the new score is
- *            less than the current score.
+ * ZADD_GT:   Perform the operation on existing elements only if the new score
+ * is greater than the current score. ZADD_LT:   Perform the operation on
+ * existing elements only if the new score is less than the current score.
  *
  * When ZADD_INCR is used, the new score of the element is stored in
  * '*newscore' if 'newscore' is not NULL.
@@ -1681,7 +1683,9 @@ int zsetScore(robj *zobj, sds member, double *score)
  * Memory management of 'ele':
  *
  * The function does not take ownership of the 'ele' SDS string, but copies
- * it if needed. */
+ * it if needed.
+ *
+ * 在函数zsetAdd中，会根据zobj->encoding分别对ziplist和dict&&skiplist进行处理 */
 int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, double *newscore)
 {
     /* Turn options into simple to check vars. */
@@ -1700,21 +1704,21 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
         return 0;
     }
 
-    /* Update the sorted set according to its encoding. */
+    /* 根据其编码更新zset */
     if (zobj->encoding == OBJ_ENCODING_ZIPLIST)
     {
         unsigned char *eptr;
-
+        /* 查找元素是否存在 */
         if ((eptr = zzlFind(zobj->ptr, ele, &curscore)) != NULL)
         {
-            /* NX? Return, same element already exists. */
+            /* 相同元素存在，NX参数直接返回 */
             if (nx)
             {
                 *out_flags |= ZADD_OUT_NOP;
                 return 1;
             }
 
-            /* Prepare the score for the increment if needed. */
+            /* 如果需要，增加分数 */
             if (incr)
             {
                 score += curscore;
@@ -1725,17 +1729,17 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
                 }
             }
 
-            /* GT/LT? Only update if score is greater/less than current. */
+            /* GT/LT？ 仅在分数大于/小于当前分数时更新。 */
             if ((lt && score >= curscore) || (gt && score <= curscore))
             {
                 *out_flags |= ZADD_OUT_NOP;
                 return 1;
             }
-
+            /* 给出新的分数值 */
             if (newscore)
                 *newscore = score;
 
-            /* Remove and re-insert when score changed. */
+            /* 当分数改变时移除并重新插入 */
             if (score != curscore)
             {
                 zobj->ptr = zzlDelete(zobj->ptr, eptr);
@@ -1746,8 +1750,9 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
         }
         else if (!xx)
         {
-            /* check if the element is too large or the list
-             * becomes too long *before* executing zzlInsert. */
+            /* 如果元素不存在，而且也不存在xx参数，需要插入元素 */
+            /* 插入时注意插入元素太大，或者列表元素数量太多，需要将ziplist转换为skiplist
+             */
             if (zzlLength(zobj->ptr) + 1 > server.zset_max_ziplist_entries ||
                 sdslen(ele) > server.zset_max_ziplist_value ||
                 !ziplistSafeToAdd(zobj->ptr, sdslen(ele)))
@@ -1756,6 +1761,7 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
             }
             else
             {
+                /* 否则直接进行插入 */
                 zobj->ptr = zzlInsert(zobj->ptr, ele, score);
                 if (newscore)
                     *newscore = score;
@@ -1771,13 +1777,18 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
     }
 
     /* Note that the above block handling ziplist would have either returned or
-     * converted the key to skiplist. */
+     * converted the key to skiplist.
+     * 请注意，上述块处理 ziplist
+     * 将返回或将key转换为跳过列表，或者本身就是skiplist+dict实现。
+     * 转换为跳表后，还需要将元素对象插入到dict中，zset由ziplist或者skiplist+dict实现
+     */
     if (zobj->encoding == OBJ_ENCODING_SKIPLIST)
     {
+        /* 逻辑类似ZIPLIST编码流程，只是插入和更新调用的接口不同 */
         zset *zs = zobj->ptr;
         zskiplistNode *znode;
         dictEntry *de;
-
+        /* 先去dict查找元素 */
         de = dictFind(zs->dict, ele);
         if (de != NULL)
         {
@@ -1814,6 +1825,7 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
             /* Remove and re-insert when score changes. */
             if (score != curscore)
             {
+                /* 元素存在，更新分数 */
                 znode = zslUpdateScore(zs->zsl, curscore, ele, score);
                 /* Note that we did not removed the original element from
                  * the hash table representing the sorted set, so we just
@@ -1825,6 +1837,7 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
         }
         else if (!xx)
         {
+            /* 直接插入元素和分数 */
             ele = sdsdup(ele);
             znode = zslInsert(zs->zsl, score, ele);
             serverAssert(dictAdd(zs->dict, ele, &znode->score) == DICT_OK);
@@ -1849,7 +1862,9 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
 /* Deletes the element 'ele' from the sorted set encoded as a skiplist+dict,
  * returning 1 if the element existed and was deleted, 0 otherwise (the
  * element was not there). It does not resize the dict after deleting the
- * element. */
+ * element.
+ * 删除元素ele
+ * 对于skiplist编码类型，先从dict里面删除，然后从skiplist中删除 */
 static int zsetRemoveFromSkiplist(zset *zs, sds ele)
 {
     dictEntry *de;
@@ -1884,6 +1899,7 @@ int zsetDel(robj *zobj, sds ele)
 {
     if (zobj->encoding == OBJ_ENCODING_ZIPLIST)
     {
+        /* ziplist编码，调用find和delete接口实现 */
         unsigned char *eptr;
 
         if ((eptr = zzlFind(zobj->ptr, ele, NULL)) != NULL)
@@ -1894,6 +1910,7 @@ int zsetDel(robj *zobj, sds ele)
     }
     else if (zobj->encoding == OBJ_ENCODING_SKIPLIST)
     {
+        /* skiplist编码，调用zsetRemoveFromSkiplist实现 */
         zset *zs = zobj->ptr;
         if (zsetRemoveFromSkiplist(zs, ele))
         {
@@ -2159,7 +2176,11 @@ void zsetTypeRandomElement(robj *zsetobj, unsigned long zsetsize, ziplistEntry *
  *----------------------------------------------------------------------------*/
 
 /* This generic command implements both ZADD and ZINCRBY. */
-/* zset添加元素的主要逻辑 */
+/* zset添加元素的主要逻辑
+ * 将一个或多个member元素及其分值score加入到有序集合对应的key当中
+ * 当key存在但对应的类型不是有序集时，会返回一个错误
+ * 如果某个member已经是有序集的成员，那么更新这个member的score值，
+ * 并通过重新插入这个member元素，来保证该member在正确的位置上 */
 void zaddGenericCommand(client *c, int flags)
 {
     static char *nanerr = "resulting score is not a number (NaN)";
@@ -2180,17 +2201,18 @@ void zaddGenericCommand(client *c, int flags)
     /* Parse options. At the end 'scoreidx' is set to the argument position
      * of the score of the first score-element pair. */
     scoreidx = 2;
-    while (scoreidx < c->argc)
-    {
+    while (scoreidx < c->argc) {
+        /* 解析参数，主要是对NX/XX/CH参数的解析，
+         * 并使用“ZADD_*”的宏来标记 */
         char *opt = c->argv[scoreidx]->ptr;
         if (!strcasecmp(opt, "nx"))
-            flags |= ZADD_IN_NX;
+            flags |= ZADD_IN_NX; /* 不更新已经存在的元素，总是添加新的元素 */
         else if (!strcasecmp(opt, "xx"))
-            flags |= ZADD_IN_XX;
+            flags |= ZADD_IN_XX; /* 只更新已经存在的元素，不添加元素 */
         else if (!strcasecmp(opt, "ch"))
-            ch = 1; /* Return num of elements added or updated. */
+            ch = 1; /* 将返回值从添加的新元素数量修改为更改的元素总数 */
         else if (!strcasecmp(opt, "incr"))
-            flags |= ZADD_IN_INCR;
+            flags |= ZADD_IN_INCR; /* 当指定此选项时，zadd的行为与zincrby类似 */
         else if (!strcasecmp(opt, "gt"))
             flags |= ZADD_IN_GT;
         else if (!strcasecmp(opt, "lt"))
@@ -2207,17 +2229,16 @@ void zaddGenericCommand(client *c, int flags)
     int gt = (flags & ZADD_IN_GT) != 0;
     int lt = (flags & ZADD_IN_LT) != 0;
 
-    /* After the options, we expect to have an even number of args, since
-     * we expect any number of score-element pairs. */
+    /* 解析参数之后，获取待添加的元素个数，元素总是以member/score成对出 */
     elements = c->argc - scoreidx;
     if (elements % 2 || !elements)
     {
         addReplyErrorObject(c, shared.syntaxerr);
         return;
     }
-    elements /= 2; /* Now this holds the number of score-element pairs. */
+    elements /= 2; /* 用来保存元素/分数对的数量 */
 
-    /* Check for incompatible options. */
+    /* 检查参数是否冲突 */
     if (nx && xx)
     {
         addReplyError(c,
@@ -2235,6 +2256,7 @@ void zaddGenericCommand(client *c, int flags)
 
     if (incr && elements > 1)
     {
+        /* incr操作只针对一个元素对 */
         addReplyError(c,
                       "INCR option supports a single increment-element pair");
         return;
@@ -2246,18 +2268,22 @@ void zaddGenericCommand(client *c, int flags)
     scores = zmalloc(sizeof(double) * elements);
     for (j = 0; j < elements; j++)
     {
+        /* 开始解析分数，如果有分数解析失败，直接返回error，避免后续的无用功 */
         if (getDoubleFromObjectOrReply(c, c->argv[scoreidx + j * 2], &scores[j], NULL) != C_OK)
             goto cleanup;
     }
 
-    /* Lookup the key and create the sorted set if does not exist. */
+    /* 在redisDB中查找key是否存在，调用函数lookupKeyWrite，
+     * 实质上是根据key在dict里面查找 */
     zobj = lookupKeyWrite(c->db, key);
     if (checkType(c, zobj, OBJ_ZSET))
         goto cleanup;
     if (zobj == NULL)
     {
+        /* 如果key不存在且参数包含XX，直接返回，啥也不做 */
         if (xx)
             goto reply_to_client; /* No key + XX option: nothing to do. */
+        /* 根据配置，选择跳表/ziplist实现zset */
         if (server.zset_max_ziplist_entries == 0 ||
             server.zset_max_ziplist_value < sdslen(c->argv[scoreidx + 1]->ptr))
         {
@@ -2267,9 +2293,11 @@ void zaddGenericCommand(client *c, int flags)
         {
             zobj = createZsetZiplistObject(); /* 创建压缩表结构 */
         }
+        /* 将key插入到db中 */
         dbAdd(c->db, key, zobj);
     }
-
+    /* 循环遍历element的个数，将element和score存入到ziplist或者skiplist中，
+     * 调用函数zsetAdd */
     for (j = 0; j < elements; j++)
     {
         double newscore;
@@ -2316,30 +2344,41 @@ cleanup:
     }
 }
 
+/* 将一个或多个member元素及其分值score加入到有序集合对应的key当中 */
 void zaddCommand(client *c)
 {
     zaddGenericCommand(c, ZADD_IN_NONE);
 }
 
+/* 在有序集合key的member的分值上增加increment
+ * increment可以是负数，相当于减去相应的值；
+ * 当key不是有序集合时，会返回一个错误；
+ * 当key不存在时，或者member不在key中时，
+ * 等同于zadd key incrementmember */
 void zincrbyCommand(client *c)
 {
     zaddGenericCommand(c, ZADD_IN_INCR);
 }
 
+/* 删除有序集合key中的一个或者多个member
+ * 不存在的member将会被忽略；
+ * 当key存在但不是有序集合时，会返回一个错误 */
 void zremCommand(client *c)
 {
     robj *key = c->argv[1];
     robj *zobj;
     int deleted = 0, keyremoved = 0, j;
-
+    /* 查找有序集合对象 */
     if ((zobj = lookupKeyWriteOrReply(c, key, shared.czero)) == NULL ||
         checkType(c, zobj, OBJ_ZSET))
         return;
-
+    /* 遍历参数列表，删除member */
     for (j = 2; j < c->argc; j++)
     {
+        /* 删除元素 */
         if (zsetDel(zobj, c->argv[j]->ptr))
             deleted++;
+        /* 如果有序集合为空，删除key */
         if (zsetLength(zobj) == 0)
         {
             dbDelete(c->db, key);
@@ -2347,7 +2386,7 @@ void zremCommand(client *c)
             break;
         }
     }
-
+    /* 如果有删除元素，发送响应 */
     if (deleted)
     {
         notifyKeyspaceEvent(NOTIFY_ZSET, "zrem", key, c->db->id);
@@ -3321,6 +3360,8 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
                 remaining >= (setnum + 1) &&
                 !strcasecmp(c->argv[j]->ptr, "weights"))
             {
+                /* WEIGHTS选项可以在使用聚合函数时为每个有序集分别指定一个乘法因子
+                 */
                 j++;
                 remaining--;
                 for (i = 0; i < setnum; i++, j++, remaining--)
@@ -3337,6 +3378,10 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
                      remaining >= 2 &&
                      !strcasecmp(c->argv[j]->ptr, "aggregate"))
             {
+                /* AGGREGATE选项可以指定并集的结果集的聚合方式，
+                 * 其中SUM表示score的和，
+                 * MIN表示某个成员的最小score值，
+                 * MAX表示某个成员的最大score值 */
                 j++;
                 remaining--;
                 if (!strcasecmp(c->argv[j]->ptr, "sum"))
@@ -3574,6 +3619,9 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
     zfree(src);
 }
 
+/* 计算给定的一个或多个（数量由numkeys指定）有序集的并集，
+ * 将结果存储到destination中。
+ * 结果集中某个成员的score值默认是所有给定集下该成员score值之和 */
 void zunionstoreCommand(client *c)
 {
     zunionInterDiffGenericCommand(c, c->argv[1], 2, SET_OP_UNION);
@@ -4100,6 +4148,7 @@ void zrevrangebyscoreCommand(client *c)
     zrangeGenericCommand(&handler, 1, 0, ZRANGE_SCORE, ZRANGE_DIRECTION_REVERSE);
 }
 
+/* 计算一个区间内成员的数量 */
 void zcountCommand(client *c)
 {
     robj *key = c->argv[1];
@@ -4107,14 +4156,14 @@ void zcountCommand(client *c)
     zrangespec range;
     unsigned long count = 0;
 
-    /* Parse the range arguments */
+    /* 从参数列表中解析出范围区间 */
     if (zslParseRange(c->argv[2], c->argv[3], &range) != C_OK)
     {
         addReplyError(c, "min or max is not a float");
         return;
     }
 
-    /* Lookup the sorted set */
+    /* 查找有序集合对象 */
     if ((zobj = lookupKeyReadOrReply(c, key, shared.czero)) == NULL ||
         checkType(c, zobj, OBJ_ZSET))
         return;
@@ -4636,6 +4685,7 @@ cleanup:
     }
 }
 
+/* 调用zsetLength函数计算有序集合的长度 */
 void zcardCommand(client *c)
 {
     robj *key = c->argv[1];
@@ -4644,7 +4694,7 @@ void zcardCommand(client *c)
     if ((zobj = lookupKeyReadOrReply(c, key, shared.czero)) == NULL ||
         checkType(c, zobj, OBJ_ZSET))
         return;
-
+    /* 通过函数zsetLength计算有序集合中基数的值 */
     addReplyLongLong(c, zsetLength(zobj));
 }
 
