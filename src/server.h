@@ -2282,10 +2282,14 @@ void ACLUpdateDefaultUserPassword(sds password);
 #define ZADD_OUT_ADDED (1 << 2)   /* 添加了新元素 */
 #define ZADD_OUT_UPDATED (1 << 3) /* 元素存在，只更新了分数 */
 
-/* Struct to hold an inclusive/exclusive range spec by score comparison. */
+/* Struct to hold an inclusive/exclusive range spec by score comparison.
+ * 表示开区间/闭区间范围的结构 */
 typedef struct
 {
+    /* 最小值和最大值 */
     double min, max;
+    /* 指示最小值和最大值是否*不*包含在范围之内
+     * 值为 1 表示不包含，值为 0 表示包含 */
     int minex, maxex; /* are min or max exclusive? */
 } zrangespec;
 

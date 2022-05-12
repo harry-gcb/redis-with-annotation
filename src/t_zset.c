@@ -746,12 +746,13 @@ static int zslParseRange(robj *min, robj *max, zrangespec *spec)
      * ZRANGEBYSCORE zset 1.5 2.5 will instead match min <= x <= max */
     if (min->encoding == OBJ_ENCODING_INT)
     {
+        /* min 的值为整数，开区间 */
         spec->min = (long)min->ptr;
-    }
-    else
-    {
+    } else {
+        /* min 对象为字符串，分析 min 的值并决定区间 */
         if (((char *)min->ptr)[0] == '(')
         {
+            /* 开区间 */
             spec->min = strtod((char *)min->ptr + 1, &eptr);
             if (eptr[0] != '\0' || isnan(spec->min))
                 return C_ERR;
@@ -759,6 +760,7 @@ static int zslParseRange(robj *min, robj *max, zrangespec *spec)
         }
         else
         {
+            /* 默认为闭区间 */
             spec->min = strtod((char *)min->ptr, &eptr);
             if (eptr[0] != '\0' || isnan(spec->min))
                 return C_ERR;
@@ -766,12 +768,15 @@ static int zslParseRange(robj *min, robj *max, zrangespec *spec)
     }
     if (max->encoding == OBJ_ENCODING_INT)
     {
+        /* max 的值为整数，开区间 */
         spec->max = (long)max->ptr;
     }
     else
     {
+        /* max 对象为字符串，分析 max 的值并决定区间 */
         if (((char *)max->ptr)[0] == '(')
         {
+            /* 开区间 */
             spec->max = strtod((char *)max->ptr + 1, &eptr);
             if (eptr[0] != '\0' || isnan(spec->max))
                 return C_ERR;
@@ -779,6 +784,7 @@ static int zslParseRange(robj *min, robj *max, zrangespec *spec)
         }
         else
         {
+            /* 默认为闭区间 */
             spec->max = strtod((char *)max->ptr, &eptr);
             if (eptr[0] != '\0' || isnan(spec->max))
                 return C_ERR;
@@ -1112,11 +1118,12 @@ int zzlIsInRange(unsigned char *zl, zrangespec *range)
     unsigned char *p;
     double score;
 
-    /* Test for ranges that will always be empty. */
+    /* 测试始终为空的范围 */
     if (range->min > range->max ||
         (range->min == range->max && (range->minex || range->maxex)))
         return 0;
 
+    /* 取出 ziplist 中的最大分值，并和 range 的最大值对比 */
     p = ziplistIndex(zl, -1); /* Last score. */
     if (p == NULL)
         return 0; /* Empty sorted set */
@@ -1124,26 +1131,32 @@ int zzlIsInRange(unsigned char *zl, zrangespec *range)
     if (!zslValueGteMin(score, range))
         return 0;
 
+    /* 取出 ziplist 中的最小值，并和 range 的最小值进行对比 */
     p = ziplistIndex(zl, 1); /* First score. */
     serverAssert(p != NULL);
     score = zzlGetScore(p);
     if (!zslValueLteMax(score, range))
         return 0;
-
+    /* ziplist 有至少一个节点符合范围 */
     return 1;
 }
 
-/* Find pointer to the first element contained in the specified range.
- * Returns NULL when no element is contained in the range. */
+/* 查找指向包含在指定范围内的第一个元素的指针
+ * 当范围内不包含任何元素时返回 NULL
+ * */
 unsigned char *zzlFirstInRange(unsigned char *zl, zrangespec *range)
 {
+    /* 从表头开始遍历 */
     unsigned char *eptr = ziplistIndex(zl, 0), *sptr;
     double score;
 
-    /* If everything is out of range, return early. */
+    /* 如果一切都超出范围，请尽早返回
+     * 测试sortset最大值和最小值是否在range范围内 */
     if (!zzlIsInRange(zl, range))
         return NULL;
 
+    /* 分值在 ziplist 中是从小到大排列的
+     * 从表头向表尾遍历 */
     while (eptr != NULL)
     {
         sptr = ziplistNext(zl, eptr);
@@ -1152,7 +1165,8 @@ unsigned char *zzlFirstInRange(unsigned char *zl, zrangespec *range)
         score = zzlGetScore(sptr);
         if (zslValueGteMin(score, range))
         {
-            /* Check if score <= max. */
+            /* Check if score <= max.
+             * 遇上第一个符合范围的分值，返回它的节点指针 */
             if (zslValueLteMax(score, range))
                 return eptr;
             return NULL;
@@ -1614,7 +1628,8 @@ void zsetConvertToZiplistIfNeeded(robj *zobj, size_t maxelelen, size_t totelelen
 /* Return (by reference) the score of the specified member of the sorted set
  * storing it into *score. If the element does not exist C_ERR is returned
  * otherwise C_OK is returned and *score is correctly populated.
- * If 'zobj' or 'member' is NULL, C_ERR is returned. */
+ * If 'zobj' or 'member' is NULL, C_ERR is returned.
+ * 查找有序集合中member对应的score */
 int zsetScore(robj *zobj, sds member, double *score)
 {
     if (!zobj || !member)
@@ -1622,11 +1637,13 @@ int zsetScore(robj *zobj, sds member, double *score)
 
     if (zobj->encoding == OBJ_ENCODING_ZIPLIST)
     {
+        /* ziplist编码，遍历对应成员即可获得score */
         if (zzlFind(zobj->ptr, member, score) == NULL)
             return C_ERR;
     }
     else if (zobj->encoding == OBJ_ENCODING_SKIPLIST)
     {
+        /* skiplist编码，直接从dict中获取member对应的score */
         zset *zs = zobj->ptr;
         dictEntry *de = dictFind(zs->dict, member);
         if (de == NULL)
@@ -1943,7 +1960,8 @@ long zsetRank(robj *zobj, sds ele, int reverse)
     unsigned long rank;
 
     llen = zsetLength(zobj);
-
+    /* 不论是用的ziplist还是skiplist，因为本身两种结构都是有序的，
+     * 那么只要遍历找到对应的成员，即可知道成员的排名 */
     if (zobj->encoding == OBJ_ENCODING_ZIPLIST)
     {
         unsigned char *zl = zobj->ptr;
@@ -2354,7 +2372,7 @@ void zaddCommand(client *c)
  * increment可以是负数，相当于减去相应的值；
  * 当key不是有序集合时，会返回一个错误；
  * 当key不存在时，或者member不在key中时，
- * 等同于zadd key incrementmember */
+ * 等同于zadd key increment member */
 void zincrbyCommand(client *c)
 {
     zaddGenericCommand(c, ZADD_IN_INCR);
@@ -3955,7 +3973,8 @@ void zrangestoreCommand(client *c)
     zrangeGenericCommand(&handler, 2, 1, ZRANGE_AUTO, ZRANGE_DIRECTION_AUTO);
 }
 
-/* ZRANGE <key> <min> <max> [BYSCORE | BYLEX] [REV] [WITHSCORES] [LIMIT offset count] */
+/* ZRANGE <key> <min> <max> [BYSCORE | BYLEX] [REV] [WITHSCORES] [LIMIT offset
+ * count] 排名查找，正常输出 */
 void zrangeCommand(client *c)
 {
     zrange_result_handler handler;
@@ -3963,7 +3982,8 @@ void zrangeCommand(client *c)
     zrangeGenericCommand(&handler, 1, 0, ZRANGE_AUTO, ZRANGE_DIRECTION_AUTO);
 }
 
-/* ZREVRANGE <key> <min> <max> [WITHSCORES] */
+/* ZREVRANGE <key> <min> <max> [WITHSCORES]
+ * 排名查找，逆序输出 */
 void zrevrangeCommand(client *c)
 {
     zrange_result_handler handler;
@@ -4167,24 +4187,26 @@ void zcountCommand(client *c)
     if ((zobj = lookupKeyReadOrReply(c, key, shared.czero)) == NULL ||
         checkType(c, zobj, OBJ_ZSET))
         return;
-
+    /* 根据编码类型不同处理计数逻辑 */
     if (zobj->encoding == OBJ_ENCODING_ZIPLIST)
     {
         unsigned char *zl = zobj->ptr;
         unsigned char *eptr, *sptr;
         double score;
 
-        /* Use the first element in range as the starting point */
+        /* 使用范围内的第一个元素作为起点 */
         eptr = zzlFirstInRange(zl, &range);
 
-        /* No "first" element */
+        /* No "first" element
+         * 没有任何元素在这个范围内，直接返回 */
         if (eptr == NULL)
         {
             addReply(c, shared.czero);
             return;
         }
 
-        /* First element is in range */
+        /* First element is in range
+         * 遍历范围内的所有元素 */
         sptr = ziplistNext(zl, eptr);
         score = zzlGetScore(sptr);
         serverAssertWithInfo(c, zobj, zslValueLteMax(score, &range));
@@ -4194,13 +4216,16 @@ void zcountCommand(client *c)
         {
             score = zzlGetScore(sptr);
 
-            /* Abort when the node is no longer in range. */
+            /* Abort when the node is no longer in range.
+             * 如果分值不符合范围，break */
             if (!zslValueLteMax(score, &range))
             {
                 break;
             }
             else
             {
+                /* 分值符合范围，增加 count 计数器
+                 * 然后指向下一个元素 */
                 count++;
                 zzlNext(zl, &eptr, &sptr);
             }
@@ -4213,22 +4238,30 @@ void zcountCommand(client *c)
         zskiplistNode *zn;
         unsigned long rank;
 
-        /* Find first element in range */
+        /* Find first element in range
+         * 指向指定范围内第一个元素 */
         zn = zslFirstInRange(zsl, &range);
 
-        /* Use rank of first element, if any, to determine preliminary count */
+        /* Use rank of first element, if any, to determine preliminary count
+         * 如果有至少一个元素在范围内，那么执行以下代码 */
         if (zn != NULL)
         {
+            /* 确定范围内第一个元素的排位 */
             rank = zslGetRank(zsl, zn->score, zn->ele);
             count = (zsl->length - (rank - 1));
 
-            /* Find last element in range */
+            /* Find last element in range
+             * 指向指定范围内的最后一个元素 */
             zn = zslLastInRange(zsl, &range);
 
-            /* Use rank of last element, if any, to determine the actual count */
+            /* Use rank of last element, if any, to determine the actual count
+             * 如果范围内的最后一个元素不为空，那么执行以下代码 */
             if (zn != NULL)
             {
+                /* 确定范围内最后一个元素的排位 */
                 rank = zslGetRank(zsl, zn->score, zn->ele);
+                /* 这里计算的就是第一个和最后一个两个元素之间的元素数量
+                 * （包括这两个元素）*/
                 count -= (zsl->length - rank);
             }
         }
@@ -4514,7 +4547,7 @@ void zrevrangebylexCommand(client *c)
  *
  * The argc_start points to the src key argument, so following syntax is like:
  * <src> <min> <max> [BYSCORE | BYLEX] [REV] [WITHSCORES] [LIMIT offset count]
- */
+ * 根据排名查找的核心实现 */
 void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int store,
                           zrange_type rangetype, zrange_direction direction)
 {
@@ -4533,16 +4566,19 @@ void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int st
     long opt_offset = 0;
     long opt_limit = -1;
 
-    /* Step 1: Skip the <src> <min> <max> args and parse remaining optional arguments. */
+    /* Step 1: Skip the <src> <min> <max> args and parse remaining optional
+     * arguments. 跳过zrange key min max，解析BYSCORE REV 等可选参数*/
     for (int j = argc_start + 3; j < c->argc; j++)
     {
         int leftargs = c->argc - j - 1;
         if (!store && !strcasecmp(c->argv[j]->ptr, "withscores"))
         {
+            /* WITHSCORES参数 [WITHSCORES] */
             opt_withscores = 1;
         }
         else if (!strcasecmp(c->argv[j]->ptr, "limit") && leftargs >= 2)
         {
+            /* LIMIT参数 [LIMIT offset count]*/
             if ((getLongFromObjectOrReply(c, c->argv[j + 1], &opt_offset, NULL) != C_OK) ||
                 (getLongFromObjectOrReply(c, c->argv[j + 2], &opt_limit, NULL) != C_OK))
             {
@@ -4553,16 +4589,19 @@ void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int st
         else if (direction == ZRANGE_DIRECTION_AUTO &&
                  !strcasecmp(c->argv[j]->ptr, "rev"))
         {
+            /* REV参数 [REV] */
             direction = ZRANGE_DIRECTION_REVERSE;
         }
         else if (rangetype == ZRANGE_AUTO &&
                  !strcasecmp(c->argv[j]->ptr, "bylex"))
         {
+            /* BYLEX参数 [BYSCORE|BYLEX] */
             rangetype = ZRANGE_LEX;
         }
         else if (rangetype == ZRANGE_AUTO &&
                  !strcasecmp(c->argv[j]->ptr, "byscore"))
         {
+            /*  BYSCORE参数 [BYSCORE|BYLEX] */
             rangetype = ZRANGE_SCORE;
         }
         else
@@ -4572,20 +4611,22 @@ void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int st
         }
     }
 
-    /* Use defaults if not overriden by arguments. */
+    /* 如果没有被参数覆盖，则使用默认值 */
     if (direction == ZRANGE_DIRECTION_AUTO)
         direction = ZRANGE_DIRECTION_FORWARD;
     if (rangetype == ZRANGE_AUTO)
         rangetype = ZRANGE_RANK;
 
-    /* Check for conflicting arguments. */
+    /* 检查参数是否冲突 */
     if (opt_limit != -1 && rangetype == ZRANGE_RANK)
     {
+        /* LIMIT选项必须与BYSCORE或BYLEX一起使用 */
         addReplyError(c, "syntax error, LIMIT is only supported in combination with either BYSCORE or BYLEX");
         return;
     }
     if (opt_withscores && rangetype == ZRANGE_LEX)
     {
+        /* WITHSCORES不可以与BYLEX一起使用 */
         addReplyError(c, "syntax error, WITHSCORES not supported in combination with BYLEX");
         return;
     }
@@ -4593,18 +4634,19 @@ void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int st
     if (direction == ZRANGE_DIRECTION_REVERSE &&
         ((ZRANGE_SCORE == rangetype) || (ZRANGE_LEX == rangetype)))
     {
-        /* Range is given as [max,min] */
+        /* 如果有参数REV，需要逆序输出，范围为[max,min] */
         int tmp = maxidx;
         maxidx = minidx;
         minidx = tmp;
     }
 
-    /* Step 2: Parse the range. */
+    /* Step 2: 解析排名range(min, max). */
     switch (rangetype)
     {
     case ZRANGE_AUTO:
     case ZRANGE_RANK:
-        /* Z[REV]RANGE, ZRANGESTORE [REV]RANGE */
+        /* Z[REV]RANGE, ZRANGESTORE [REV]RANGE
+         * 根据rank获取排名范围 */
         if ((getLongFromObjectOrReply(c, c->argv[minidx], &opt_start, NULL) != C_OK) ||
             (getLongFromObjectOrReply(c, c->argv[maxidx], &opt_end, NULL) != C_OK))
         {
@@ -4613,7 +4655,8 @@ void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int st
         break;
 
     case ZRANGE_SCORE:
-        /* Z[REV]RANGEBYSCORE, ZRANGESTORE [REV]RANGEBYSCORE */
+        /* Z[REV]RANGEBYSCORE, ZRANGESTORE [REV]RANGEBYSCORE
+         * 根据分数获取排名范围 */
         if (zslParseRange(c->argv[minidx], c->argv[maxidx], &range) != C_OK)
         {
             addReplyError(c, "min or max is not a float");
@@ -4622,7 +4665,8 @@ void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int st
         break;
 
     case ZRANGE_LEX:
-        /* Z[REV]RANGEBYLEX, ZRANGESTORE [REV]RANGEBYLEX */
+        /* Z[REV]RANGEBYLEX, ZRANGESTORE [REV]RANGEBYLEX
+         * 根据字母序获取排名范围 */
         if (zslParseLexRange(c->argv[minidx], c->argv[maxidx], &lexrange) != C_OK)
         {
             addReplyError(c, "min or max not valid string range item");
@@ -4698,16 +4742,19 @@ void zcardCommand(client *c)
     addReplyLongLong(c, zsetLength(zobj));
 }
 
+/* zscore key member
+ * 获取分值 */
 void zscoreCommand(client *c)
 {
     robj *key = c->argv[1];
     robj *zobj;
     double score;
-
+    /* 查找zset对象 */
     if ((zobj = lookupKeyReadOrReply(c, key, shared.null[c->resp])) == NULL ||
         checkType(c, zobj, OBJ_ZSET))
         return;
 
+    /* 获取member对应的score */
     if (zsetScore(zobj, c->argv[2]->ptr, &score) == C_ERR)
     {
         addReplyNull(c);
@@ -4748,7 +4795,7 @@ void zrankGenericCommand(client *c, int reverse)
     robj *ele = c->argv[2];
     robj *zobj;
     long rank;
-
+    /* 有序集合 */
     if ((zobj = lookupKeyReadOrReply(c, key, shared.null[c->resp])) == NULL ||
         checkType(c, zobj, OBJ_ZSET))
         return;
@@ -4765,6 +4812,7 @@ void zrankGenericCommand(client *c, int reverse)
     }
 }
 
+/* 获取排名命令 */
 void zrankCommand(client *c)
 {
     zrankGenericCommand(c, 0);
@@ -4775,6 +4823,7 @@ void zrevrankCommand(client *c)
     zrankGenericCommand(c, 1);
 }
 
+/* 遍历有序集合，与scan类似 */
 void zscanCommand(client *c)
 {
     robj *o;
