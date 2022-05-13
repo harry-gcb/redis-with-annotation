@@ -771,11 +771,12 @@ struct redisCommand redisCommandTable[] = {
 
     {"command", commandCommand, -1, "ok-loading ok-stale random @connection", 0,
      NULL, 0, 0, 0, 0, 0, 0},
-
+    /* 添加地理坐标 */
     {"geoadd", geoaddCommand, -5, "write use-memory @geo", 0, NULL, 1, 1, 1, 0,
      0, 0},
 
-    /* GEORADIUS has store options that may write. */
+    /* GEORADIUS has store options that may write.
+     * 使用georadius/georadiusbymembe查询范围内元素 */
     {"georadius", georadiusCommand, -6, "write use-memory @geo", 0,
      georadiusGetKeys, 1, 1, 1, 0, 0, 0},
 
@@ -787,12 +788,12 @@ struct redisCommand redisCommandTable[] = {
 
     {"georadiusbymember_ro", georadiusbymemberroCommand, -5, "read-only @geo",
      0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 计算坐标，返回标准的geohash字符串 */
     {"geohash", geohashCommand, -2, "read-only @geo", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
+    /* 使用geopos查询位置经纬度，返回经纬度 */
     {"geopos", geoposCommand, -2, "read-only @geo", 0, NULL, 1, 1, 1, 0, 0, 0},
-
+    /* 使用geodist计算两点距离 */
     {"geodist", geodistCommand, -4, "read-only @geo", 0, NULL, 1, 1, 1, 0, 0,
      0},
 

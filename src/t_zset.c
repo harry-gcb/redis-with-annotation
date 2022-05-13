@@ -2436,7 +2436,8 @@ void zremrangeGenericCommand(client *c, zrange_type rangetype)
     long start, end, llen;
     char *notify_type = NULL;
 
-    /* Step 1: Parse the range. */
+    /* Step 1: Parse the range.
+     * 按不同类型取出待删除的元素范围 */
     if (rangetype == ZRANGE_RANK)
     {
         notify_type = "zremrangebyrank";
@@ -2467,13 +2468,15 @@ void zremrangeGenericCommand(client *c, zrange_type rangetype)
         serverPanic("unknown rangetype %d", (int)rangetype);
     }
 
-    /* Step 2: Lookup & range sanity checks if needed. */
+    /* Step 2: Lookup & range sanity checks if needed.
+     * 查找有序集合对象，并检查类型 */
     if ((zobj = lookupKeyWriteOrReply(c, key, shared.czero)) == NULL ||
         checkType(c, zobj, OBJ_ZSET))
         goto cleanup;
 
     if (rangetype == ZRANGE_RANK)
     {
+        /* 修正start/end参数 */
         /* Sanitize indexes. */
         llen = zsetLength(zobj);
         if (start < 0)
@@ -2494,7 +2497,8 @@ void zremrangeGenericCommand(client *c, zrange_type rangetype)
             end = llen - 1;
     }
 
-    /* Step 3: Perform the range deletion operation. */
+    /* Step 3: Perform the range deletion operation.
+     * 根据不同类型删除范围中的元素 */
     if (zobj->encoding == OBJ_ENCODING_ZIPLIST)
     {
         switch (rangetype)
@@ -2512,6 +2516,7 @@ void zremrangeGenericCommand(client *c, zrange_type rangetype)
         }
         if (zzlLength(zobj->ptr) == 0)
         {
+            /* 对象已清空，从数据库中删除 */
             dbDelete(c->db, key);
             keyremoved = 1;
         }
@@ -2536,6 +2541,7 @@ void zremrangeGenericCommand(client *c, zrange_type rangetype)
             dictResize(zs->dict);
         if (dictSize(zs->dict) == 0)
         {
+            /* 对象已清空，从数据库中删除 */
             dbDelete(c->db, key);
             keyremoved = 1;
         }
@@ -2554,6 +2560,7 @@ void zremrangeGenericCommand(client *c, zrange_type rangetype)
             notifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, c->db->id);
     }
     server.dirty += deleted;
+    /* 回复被删除的元素个数 */
     addReplyLongLong(c, deleted);
 
 cleanup:
@@ -2561,16 +2568,17 @@ cleanup:
         zslFreeLexRange(&lexrange);
 }
 
+/* 按排名范围删除元素 */
 void zremrangebyrankCommand(client *c)
 {
     zremrangeGenericCommand(c, ZRANGE_RANK);
 }
-
+/* 按分数范围删除元素 */
 void zremrangebyscoreCommand(client *c)
 {
     zremrangeGenericCommand(c, ZRANGE_SCORE);
 }
-
+/* 按字母序范围删除元素 */
 void zremrangebylexCommand(client *c)
 {
     zremrangeGenericCommand(c, ZRANGE_LEX);
@@ -3300,14 +3308,16 @@ dictType setAccumulatorDictType = {
     NULL               /* allow to expand */
 };
 
-/* The zunionInterDiffGenericCommand() function is called in order to implement the
- * following commands: ZUNION, ZINTER, ZDIFF, ZUNIONSTORE, ZINTERSTORE, ZDIFFSTORE.
+/* The zunionInterDiffGenericCommand() function is called in order to implement
+ * the following commands: ZUNION, ZINTER, ZDIFF, ZUNIONSTORE, ZINTERSTORE,
+ * ZDIFFSTORE.
  *
- * 'numkeysIndex' parameter position of key number. for ZUNION/ZINTER/ZDIFF command,
- * this value is 1, for ZUNIONSTORE/ZINTERSTORE/ZDIFFSTORE command, this value is 2.
+ * 'numkeysIndex' parameter position of key number. for ZUNION/ZINTER/ZDIFF
+ * command, this value is 1, for ZUNIONSTORE/ZINTERSTORE/ZDIFFSTORE command,
+ * this value is 2.
  *
  * 'op' SET_OP_INTER, SET_OP_UNION or SET_OP_DIFF.
- */
+ * 集合运算的实现函数 */
 void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, int op)
 {
     int i, j;
@@ -3322,7 +3332,7 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
     zskiplistNode *znode;
     int withscores = 0;
 
-    /* expect setnum input keys to be given */
+    /* 期望给定numkeys的值 */
     if ((getLongFromObjectOrReply(c, c->argv[numkeysIndex], &setnum, NULL) != C_OK))
         return;
 
@@ -3333,14 +3343,16 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
         return;
     }
 
-    /* test if the expected number of keys would overflow */
+    /* test if the expected number of keys would overflow
+     * 测试给定的numkeys是否正确 */
     if (setnum > (c->argc - (numkeysIndex + 1)))
     {
         addReplyErrorObject(c, shared.syntaxerr);
         return;
     }
 
-    /* read keys to be used for input */
+    /* read keys to be used for input
+     * 从输入的key中获取有序集合对象 */
     src = zcalloc(sizeof(zsetopsrc) * setnum);
     for (i = 0, j = numkeysIndex + 1; i < setnum; i++, j++)
     {
@@ -3367,7 +3379,8 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
         src[i].weight = 1.0;
     }
 
-    /* parse optional extra arguments */
+    /* parse optional extra arguments
+     * 解析可选参数 */
     if (j < c->argc)
     {
         int remaining = c->argc - j;
@@ -3443,17 +3456,20 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
     if (op != SET_OP_DIFF)
     {
         /* sort sets from the smallest to largest, this will improve our
-         * algorithm's performance */
+         * algorithm's performance
+         * 将key按照对应有序集合的大小从小到大排序，用来提升算法的性能 */
         qsort(src, setnum, sizeof(zsetopsrc), zuiCompareByCardinality);
     }
 
     dstobj = createZsetObject();
     dstzset = dstobj->ptr;
     memset(&zval, 0, sizeof(zval));
-
+    /* 分别对交集和并集单独处理*/
     if (op == SET_OP_INTER)
     {
-        /* Skip everything if the smallest input is empty. */
+        /* Skip everything if the smallest input is empty.
+         * 若是交集计算，思路就是遍历最小集合里面的元素，
+         * 判断是否存在于其他集合中，如果都存在则存入目标集合中，否则不存 */
         if (zuiLength(&src[0]) > 0)
         {
             /* Precondition: as src[0] is non-empty and the inputs are ordered
@@ -3503,6 +3519,9 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
     }
     else if (op == SET_OP_UNION)
     {
+        /* 若是并集计算，因为并集肯定大于等于最大的集合，
+         * 因此先创建一个和最大集合一样大的集合，
+         * 然后遍历所有集合，插入到新目标集合中去，思路很简单 */
         dict *accumulator = dictCreate(&setAccumulatorDictType, NULL);
         dictIterator *di;
         dictEntry *de, *existing;
@@ -3580,6 +3599,7 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
     }
     else if (op == SET_OP_DIFF)
     {
+        /* 补集 */
         zdiff(src, setnum, dstzset, &maxelelen, &totelelen);
     }
     else
@@ -3854,7 +3874,8 @@ static void zrangeResultHandlerDestinationKeySet(zrange_result_handler *handler,
     handler->dstkey = dstkey;
 }
 
-/* This command implements ZRANGE, ZREVRANGE. */
+/* This command implements ZRANGE, ZREVRANGE.
+ * 用于实现ZRANGE/ZREVRANGE，根据排名 */
 void genericZrangebyrankCommand(zrange_result_handler *handler,
                                 robj *zobj, long start, long end, int withscores, int reverse)
 {
@@ -3864,7 +3885,7 @@ void genericZrangebyrankCommand(zrange_result_handler *handler,
     long rangelen;
     size_t result_cardinality;
 
-    /* Sanitize indexes. */
+    /* 获取有序集合长度，将负数索引转换为正数索引 */
     llen = zsetLength(zobj);
     if (start < 0)
         start = llen + start;
@@ -3873,10 +3894,12 @@ void genericZrangebyrankCommand(zrange_result_handler *handler,
     if (start < 0)
         start = 0;
 
+    /* 获取发送缓冲区指针 */
     handler->beginResultEmission(handler);
 
     /* Invariant: start >= 0, so this test will be true when end < 0.
      * The range is empty when start > end or start >= length. */
+    /* 过滤和调整索引 */
     if (start > end || start >= llen)
     {
         handler->finalizeResultEmission(handler, 0);
@@ -3889,13 +3912,15 @@ void genericZrangebyrankCommand(zrange_result_handler *handler,
 
     if (zobj->encoding == OBJ_ENCODING_ZIPLIST)
     {
+        /* ziplist编码类型 */
         unsigned char *zl = zobj->ptr;
         unsigned char *eptr, *sptr;
         unsigned char *vstr;
         unsigned int vlen;
         long long vlong;
         double score = 0.0;
-
+        /* 迭代器方向，正序和逆序查找
+         * start*2是因为 ziplist的member和score个占一个存储单元 */
         if (reverse)
             eptr = ziplistIndex(zl, -2 - (2 * start));
         else
@@ -3903,12 +3928,12 @@ void genericZrangebyrankCommand(zrange_result_handler *handler,
 
         serverAssertWithInfo(c, zobj, eptr != NULL);
         sptr = ziplistNext(zl, eptr);
-
+        /* 取出元素 */
         while (rangelen--)
         {
             serverAssertWithInfo(c, zobj, eptr != NULL && sptr != NULL);
             serverAssertWithInfo(c, zobj, ziplistGet(eptr, &vstr, &vlen, &vlong));
-
+            /* 获取分数 */
             if (withscores) /* don't bother to extract the score if it's gonna be ignored. */
                 score = zzlGetScore(sptr);
 
@@ -3920,7 +3945,7 @@ void genericZrangebyrankCommand(zrange_result_handler *handler,
             {
                 handler->emitResultFromCBuffer(handler, vstr, vlen, score);
             }
-
+            /* 下一个节点，实际跨越了两个节点，member节点和score节点 */
             if (reverse)
                 zzlPrev(zl, &eptr, &sptr);
             else
@@ -3936,6 +3961,7 @@ void genericZrangebyrankCommand(zrange_result_handler *handler,
         /* Check if starting point is trivial, before doing log(N) lookup. */
         if (reverse)
         {
+            /* 迭代方向 */
             ln = zsl->tail;
             if (start > 0)
                 ln = zslGetElementByRank(zsl, llen - start);
@@ -4011,28 +4037,30 @@ void genericZrangebyscoreCommand(zrange_result_handler *handler,
 
     if (zobj->encoding == OBJ_ENCODING_ZIPLIST)
     {
+        /* ziplist编码类型 */
         unsigned char *zl = zobj->ptr;
         unsigned char *eptr, *sptr;
         unsigned char *vstr;
         unsigned int vlen;
         long long vlong;
 
-        /* If reversed, get the last node in range as starting point. */
         if (reverse)
         {
+            /* 如果取反，则取范围内的最后一个节点作为起点 */
             eptr = zzlLastInRange(zl, range);
         }
         else
         {
+            /* 范围内第一个节点作为起点 */
             eptr = zzlFirstInRange(zl, range);
         }
 
-        /* Get score pointer for the first element. */
+        /* 获取第一个元素的score指针 */
         if (eptr)
             sptr = ziplistNext(zl, eptr);
 
-        /* If there is an offset, just traverse the number of elements without
-         * checking the score because that is done in the next loop. */
+        /* 如果有偏移量，只需遍历元素数量而不检查分数，
+         * 因为这是在下一个循环中完成的 */
         while (eptr && offset--)
         {
             if (reverse)
@@ -4044,12 +4072,14 @@ void genericZrangebyscoreCommand(zrange_result_handler *handler,
                 zzlNext(zl, &eptr, &sptr);
             }
         }
-
+        /* 从开始位置遍历 */
         while (eptr && limit--)
         {
+            /* 取出分数 */
             double score = zzlGetScore(sptr);
 
-            /* Abort when the node is no longer in range. */
+            /* Abort when the node is no longer in range.
+             * 找到不再是区间的位置，跳出遍历 */
             if (reverse)
             {
                 if (!zslValueGteMin(score, range))
@@ -4063,7 +4093,8 @@ void genericZrangebyscoreCommand(zrange_result_handler *handler,
 
             /* We know the element exists, so ziplistGet should always
              * succeed */
-            serverAssertWithInfo(c, zobj, ziplistGet(eptr, &vstr, &vlen, &vlong));
+            serverAssertWithInfo(c, zobj,
+                                 ziplistGet(eptr, &vstr, &vlen, &vlong));
 
             rangelen++;
             if (vstr == NULL)
@@ -4075,7 +4106,7 @@ void genericZrangebyscoreCommand(zrange_result_handler *handler,
                 handler->emitResultFromCBuffer(handler, vstr, vlen, score);
             }
 
-            /* Move to next node */
+            /* 下一个节点 */
             if (reverse)
             {
                 zzlPrev(zl, &eptr, &sptr);
@@ -4646,7 +4677,7 @@ void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int st
     case ZRANGE_AUTO:
     case ZRANGE_RANK:
         /* Z[REV]RANGE, ZRANGESTORE [REV]RANGE
-         * 根据rank获取排名范围 */
+         * 根据rank获取排名范围，取出start和end参数 */
         if ((getLongFromObjectOrReply(c, c->argv[minidx], &opt_start, NULL) != C_OK) ||
             (getLongFromObjectOrReply(c, c->argv[maxidx], &opt_end, NULL) != C_OK))
         {
@@ -4674,16 +4705,18 @@ void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int st
         }
         break;
     }
-
+    /* 是否显示分值 */
     if (opt_withscores || store)
     {
         zrangeResultHandlerScoreEmissionEnable(handler);
     }
 
-    /* Step 3: Lookup the key and get the range. */
+    /* Step 3: Lookup the key and get the range.
+     * 取出有序集合对象 */
     zobj = handler->dstkey ? lookupKeyWrite(c->db, key) : lookupKeyRead(c->db, key);
     if (zobj == NULL)
     {
+        /* 取出的对象为空 */
         if (store)
         {
             handler->beginResultEmission(handler);
@@ -4693,27 +4726,31 @@ void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int st
         {
             addReply(c, shared.emptyarray);
         }
+        /* 否则直接返回空集合 */
         goto cleanup;
     }
-
+    /* 检查对象类型是否为ZSET */
     if (checkType(c, zobj, OBJ_ZSET))
         goto cleanup;
 
-    /* Step 4: Pass this to the command-specific handler. */
+    /* 将此传递给特定于命令的处理程序 */
     switch (rangetype)
     {
     case ZRANGE_AUTO:
     case ZRANGE_RANK:
+        /* 根据排名 */
         genericZrangebyrankCommand(handler, zobj, opt_start, opt_end,
                                    opt_withscores || store, direction == ZRANGE_DIRECTION_REVERSE);
         break;
 
     case ZRANGE_SCORE:
+        /* 根据分数 */
         genericZrangebyscoreCommand(handler, &range, zobj, opt_offset,
                                     opt_limit, direction == ZRANGE_DIRECTION_REVERSE);
         break;
 
     case ZRANGE_LEX:
+        /* 根据字母序 */
         genericZrangebylexCommand(handler, &lexrange, zobj, opt_withscores || store,
                                   opt_offset, opt_limit, direction == ZRANGE_DIRECTION_REVERSE);
         break;
