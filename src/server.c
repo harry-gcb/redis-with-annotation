@@ -805,17 +805,20 @@ struct redisCommand redisCommandTable[] = {
 
     {"pfselftest", pfselftestCommand, 1, "admin @hyperloglog", 0, NULL, 0, 0, 0,
      0, 0, 0},
-
+    /* 添加基数，将一个或多个元素添加到指定的HLL中 */
     {"pfadd", pfaddCommand, -2, "write use-memory fast @hyperloglog", 0, NULL,
      1, 1, 1, 0, 0, 0},
 
     /* Technically speaking PFCOUNT may change the key since it changes the
      * final bytes in the HyperLogLog representation. However in this case
      * we claim that the representation, even if accessible, is an internal
-     * affair, and the command is semantically read only. */
+     * affair, and the command is semantically read only.
+     * 近似基数，用于计算指定HLL的近似基数
+     * 比如使用HLL存储每天的UV，那么计算一周的UV可使用7天的UV合并计算即可 */
     {"pfcount", pfcountCommand, -2, "read-only may-replicate @hyperloglog", 0,
      NULL, 1, -1, 1, 0, 0, 0},
-
+    /* 合并基数，将一个或多个HLL合并后的结果存储在另一个HLL中
+     * 比如每月活跃用户可以使用每天的活跃用户来合并计算可得 */
     {"pfmerge", pfmergeCommand, -2, "write use-memory @hyperloglog", 0, NULL, 1,
      -1, 1, 0, 0, 0},
 
