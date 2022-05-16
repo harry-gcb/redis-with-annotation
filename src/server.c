@@ -605,15 +605,15 @@ struct redisCommand redisCommandTable[] = {
 
     {"type", typeCommand, 2, "read-only fast @keyspace", 0, NULL, 1, 1, 1, 0, 0,
      0},
-
+    /* 标志一个事务的开始，返回值为ok */
     {"multi", multiCommand, 1,
      "no-script fast ok-loading ok-stale @transaction", 0, NULL, 0, 0, 0, 0, 0,
      0},
-
+    /* 显式提交一个事务 */
     {"exec", execCommand, 1,
      "no-script no-slowlog ok-loading ok-stale @transaction", 0, NULL, 0, 0, 0,
      0, 0, 0},
-
+    /* 放弃一个事务 */
     {"discard", discardCommand, 1,
      "no-script fast ok-loading ok-stale @transaction", 0, NULL, 0, 0, 0, 0, 0,
      0},
@@ -667,30 +667,31 @@ struct redisCommand redisCommandTable[] = {
 
     {"config", configCommand, -2, "admin ok-loading ok-stale no-script", 0,
      NULL, 0, 0, 0, 0, 0, 0},
-
+    /* 订阅指定channel的message */
     {"subscribe", subscribeCommand, -2, "pub-sub no-script ok-loading ok-stale",
      0, NULL, 0, 0, 0, 0, 0, 0},
-
+    /* 取消订阅命令 */
     {"unsubscribe", unsubscribeCommand, -1,
      "pub-sub no-script ok-loading ok-stale", 0, NULL, 0, 0, 0, 0, 0, 0},
-
+    /* 订阅指定模式渠道命令 */
     {"psubscribe", psubscribeCommand, -2,
      "pub-sub no-script ok-loading ok-stale", 0, NULL, 0, 0, 0, 0, 0, 0},
-
+    /* 取消订阅指定渠道命令 */
     {"punsubscribe", punsubscribeCommand, -1,
      "pub-sub no-script ok-loading ok-stale", 0, NULL, 0, 0, 0, 0, 0, 0},
-
+    /* 向指定channel发送消息 */
     {"publish", publishCommand, 3,
      "pub-sub ok-loading ok-stale fast may-replicate", 0, NULL, 0, 0, 0, 0, 0,
      0},
-
+    /* 查看订阅状态命令 */
     {"pubsub", pubsubCommand, -2, "pub-sub ok-loading ok-stale random", 0, NULL,
      0, 0, 0, 0, 0, 0},
-
+    /* 监听指定的key，只有当指定的key没有变化时该连接上的事务才会执行。返回值为ok
+     */
     {"watch", watchCommand, -2,
      "no-script fast ok-loading ok-stale @transaction", 0, NULL, 1, -1, 1, 0, 0,
      0},
-
+    /* 不再监听该连接上watch指定的所有key。返回值为ok */
     {"unwatch", unwatchCommand, 1,
      "no-script fast ok-loading ok-stale @transaction", 0, NULL, 0, 0, 0, 0, 0,
      0},
@@ -4111,6 +4112,9 @@ int processCommand(client *c) {
         c->cmd->proc != multiCommand && c->cmd->proc != watchCommand &&
         c->cmd->proc != resetCommand)
     {
+        /* 在事务上下文中
+         * 除 EXEC 、 DISCARD 、 MULTI 和 WATCH 命令之外
+         * 其他所有命令都会被入队到事务队列中*/
         queueMultiCommand(c);
         addReply(c,shared.queued);
     } else {

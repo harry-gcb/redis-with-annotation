@@ -1643,7 +1643,9 @@ struct redisServer
     size_t blocking_op_nesting;  /* Nesting level of blocking operation, used to reset blocked_last_cron. */
     long long blocked_last_cron; /* Indicate the mstime of the last time we did cron jobs from a blocking operation */
     /* Pubsub */
-    dict *pubsub_channels;      /* Map channels to list of subscribed clients */
+    dict *
+        pubsub_channels; /* key为channel的值，而value是每个订阅了该channel的clients
+                          */
     dict *pubsub_patterns;      /* A dict of pubsub_patterns */
     int notify_keyspace_events; /* Events to propagate via Pub/Sub. This is an
                                    xor of NOTIFY_... flags. */
@@ -1671,27 +1673,24 @@ struct redisServer
                                           is down? */
     int cluster_config_file_lock_fd;     /* cluster config fd, will be flock */
     /* Scripting */
-    lua_State *lua;                     /* The Lua interpreter. We use just one for all clients */
-    client *lua_client;                 /* The "fake client" to query Redis from Lua */
-    client *lua_caller;                 /* The client running EVAL right now, or NULL */
-    char *lua_cur_script;               /* SHA1 of the script currently running, or NULL */
-    dict *lua_scripts;                  /* A dictionary of SHA1 -> Lua scripts */
-    unsigned long long lua_scripts_mem; /* Cached scripts' memory + oh */
-    mstime_t lua_time_limit;            /* Script timeout in milliseconds */
-    monotime lua_time_start;            /* monotonic timer to detect timed-out script */
+    lua_State *lua;     /* Lua解释器，所有client共用 */
+    client *lua_client; /* 执行 Lua 脚本中的 Redis 命令的伪客户端 */
+    client *lua_caller; /* 当前正在执行 EVAL 命令的客户端，如果没有就是 NULL */
+    char *lua_cur_script; /* 当前正在执行脚本的SHA1，没有时为NULL */
+    dict *lua_scripts;    /* SHA1和原始脚本的字典映射 */
+    unsigned long long lua_scripts_mem; /* 缓存Lua脚本使用的内存，单位字节 */
+    mstime_t lua_time_limit;            /* 脚本超时时间，单位毫秒 */
+    monotime lua_time_start;            /* 脚本启动时间，单位毫秒 */
     mstime_t lua_time_snapshot;         /* Snapshot of mstime when script is started */
-    int lua_write_dirty;                /* True if a write command was called during the
-                                           execution of the current script. */
-    int lua_random_dirty;               /* True if a random command was called during the
-                                           execution of the current script. */
-    int lua_replicate_commands;         /* True if we are doing single commands repl. */
-    int lua_multi_emitted;              /* True if we already propagated MULTI. */
-    int lua_repl;                       /* Script replication flags for redis.set_repl(). */
-    int lua_timedout;                   /* True if we reached the time limit for script
-                                           execution. */
-    int lua_kill;                       /* Kill the script if true. */
-    int lua_always_replicate_commands;  /* Default replication type. */
-    int lua_oom;                        /* OOM detected when script start? */
+    int lua_write_dirty;  /* 脚本执行期间是否执行过写命令 */
+    int lua_random_dirty; /* 脚本执行期间是否执行过随机命令 */
+    int lua_replicate_commands;        /* 是否执行脚本复制的命令 */
+    int lua_multi_emitted;             /* 是否传播事务 */
+    int lua_repl;                      /* 脚本是否复制 */
+    int lua_timedout;                  /* 执行是否超时 */
+    int lua_kill;                      /* 是否停止脚本运行 */
+    int lua_always_replicate_commands; /* 默认复制类型 */
+    int lua_oom; /* 脚本启动后是否执行OOM检测 */
     /* Lazy free */
     int lazyfree_lazy_eviction;
     int lazyfree_lazy_expire;

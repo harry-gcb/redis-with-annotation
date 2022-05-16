@@ -630,12 +630,14 @@ long long dbTotalServerKeyCount() {
  *----------------------------------------------------------------------------*/
 
 /* Note that the 'c' argument may be NULL if the key was modified out of
- * a context of a client. */
+ * a context of a client.
+ * 键空间改动的钩子
+ * 每当数据库中的键被改动时， signalModifiedKey() 函数都会被调用 */
 void signalModifiedKey(client *c, redisDb *db, robj *key) {
     touchWatchedKey(db,key);
     trackingInvalidateKey(c,key);
 }
-
+/* 每当一个数据库被清空时， signalFlushDb() 都会被调用 */
 void signalFlushedDb(int dbid, int async) {
     int startdb, enddb;
     if (dbid == -1) {
