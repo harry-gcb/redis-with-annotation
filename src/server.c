@@ -590,7 +590,7 @@ struct redisCommand redisCommandTable[] = {
     {"echo", echoCommand, 2, "fast @connection", 0, NULL, 0, 0, 0, 0, 0, 0},
 
     {"save", saveCommand, 1, "admin no-script", 0, NULL, 0, 0, 0, 0, 0, 0},
-
+    /* bgsave命令，执行RDB快照 */
     {"bgsave", bgsaveCommand, -1, "admin no-script", 0, NULL, 0, 0, 0, 0, 0, 0},
 
     {"bgrewriteaof", bgrewriteaofCommand, 1, "admin no-script", 0, NULL, 0, 0,
@@ -739,7 +739,7 @@ struct redisCommand redisCommandTable[] = {
      *
      * EVAL and EVALSHA also feed monitors before the commands are executed,
      * as opposed to after.
-     */
+     * eval命令 */
     {"eval", evalCommand, -3, "no-script no-monitor may-replicate @scripting",
      0, evalGetKeys, 0, 0, 0, 0, 0, 0},
 
@@ -4759,7 +4759,8 @@ sds genRedisInfoString(const char *section) {
         int aof_bio_fsync_status;
         atomicGet(server.aof_bio_fsync_status,aof_bio_fsync_status);
 
-        info = sdscatprintf(info,
+        info = sdscatprintf(
+            info,
             "# Persistence\r\n"
             "loading:%d\r\n"
             "current_cow_size:%zu\r\n"
@@ -4784,31 +4785,38 @@ sds genRedisInfoString(const char *section) {
             "aof_last_cow_size:%zu\r\n"
             "module_fork_in_progress:%d\r\n"
             "module_fork_last_cow_size:%zu\r\n",
-            (int)server.loading,
+            (int)server.loading, /* 是否正在加载RDB文件内容 */
             server.stat_current_cow_bytes,
-            server.stat_current_cow_updated ? (unsigned long) elapsedMs(server.stat_current_cow_updated) / 1000 : 0,
-            fork_perc,
-            server.stat_current_save_keys_processed,
+            server.stat_current_cow_updated
+                ? (unsigned long)elapsedMs(server.stat_current_cow_updated) /
+                      1000
+                : 0,
+            fork_perc, server.stat_current_save_keys_processed,
             server.stat_current_save_keys_total,
-            server.dirty,
-            server.child_type == CHILD_TYPE_RDB,
-            (intmax_t)server.lastsave,
-            (server.lastbgsave_status == C_OK) ? "ok" : "err",
-            (intmax_t)server.rdb_save_time_last,
-            (intmax_t)((server.child_type != CHILD_TYPE_RDB) ?
-                -1 : time(NULL)-server.rdb_save_time_start),
-            server.stat_rdb_cow_bytes,
-            server.aof_state != AOF_OFF,
-            server.child_type == CHILD_TYPE_AOF,
-            server.aof_rewrite_scheduled,
+            server.dirty, 
+            server.child_type ==
+                CHILD_TYPE_RDB, /* 是否正在后台执行RDB保存任务 */
+            (intmax_t)server.lastsave, /* 最后一次执行RDB保存任务的时间 */
+            (server.lastbgsave_status == C_OK)
+                ? "ok"
+                : "err", /* 最后一次执行RDB保存任务的状态 */
+            (intmax_t)server
+                .rdb_save_time_last, /* 最后一次执行RDB保存任务消耗的时间 */
+            (intmax_t)((server.child_type != CHILD_TYPE_RDB)
+                           ? -1
+                           : time(NULL) - server.rdb_save_time_start),
+            server.stat_rdb_cow_bytes, server.aof_state != AOF_OFF,
+            server.child_type == CHILD_TYPE_AOF, server.aof_rewrite_scheduled,
             (intmax_t)server.aof_rewrite_time_last,
-            (intmax_t)((server.child_type != CHILD_TYPE_AOF) ?
-                -1 : time(NULL)-server.aof_rewrite_time_start),
+            (intmax_t)((server.child_type != CHILD_TYPE_AOF)
+                           ? -1
+                           : time(NULL) - server.aof_rewrite_time_start),
             (server.aof_lastbgrewrite_status == C_OK) ? "ok" : "err",
             (server.aof_last_write_status == C_OK &&
-                aof_bio_fsync_status == C_OK) ? "ok" : "err",
-            server.stat_aof_cow_bytes,
-            server.child_type == CHILD_TYPE_MODULE,
+             aof_bio_fsync_status == C_OK)
+                ? "ok"
+                : "err",
+            server.stat_aof_cow_bytes, server.child_type == CHILD_TYPE_MODULE,
             server.stat_module_cow_bytes);
 
         if (server.aof_enabled) {

@@ -2749,7 +2749,8 @@ eoferr:
  * output is initialized and finalized.
  *
  * If you pass an 'rsi' structure initialied with RDB_SAVE_OPTION_INIT, the
- * loading code will fiil the information fields in the structure. */
+ * loading code will fiil the information fields in the structure.
+ * 将给定 rdb 中保存的数据载入到数据库中。*/
 int rdbLoad(char *filename, rdbSaveInfo *rsi, int rdbflags) {
     FILE *fp;
     rio rdb;
@@ -2983,12 +2984,14 @@ void saveCommand(client *c) {
     }
 }
 
-/* BGSAVE [SCHEDULE] */
+/* BGSAVE [SCHEDULE]
+ * bgsave命令实现 */
 void bgsaveCommand(client *c) {
     int schedule = 0;
 
     /* The SCHEDULE option changes the behavior of BGSAVE when an AOF rewrite
-     * is in progress. Instead of returning an error a BGSAVE gets scheduled. */
+     * is in progress. Instead of returning an error a BGSAVE gets scheduled.
+     * 获取第二个参数schedule */
     if (c->argc > 1) {
         if (c->argc == 2 && !strcasecmp(c->argv[1]->ptr,"schedule")) {
             schedule = 1;
@@ -3000,10 +3003,11 @@ void bgsaveCommand(client *c) {
 
     rdbSaveInfo rsi, *rsiptr;
     rsiptr = rdbPopulateSaveInfo(&rsi);
-
+    /* bgsave已经在执行了 */
     if (server.child_type == CHILD_TYPE_RDB) {
         addReplyError(c,"Background save already in progress");
     } else if (hasActiveChildProcess()) {
+        /* 已经有子进程在执行BGSAVE命令了，不可重复执行 BGSAVE */
         if (schedule) {
             server.rdb_bgsave_scheduled = 1;
             addReplyStatus(c,"Background saving scheduled");
@@ -3014,6 +3018,7 @@ void bgsaveCommand(client *c) {
             "possible.");
         }
     } else if (rdbSaveBackground(server.rdb_filename,rsiptr) == C_OK) {
+        /* 执行BGSAVE命令 */
         addReplyStatus(c,"Background saving started");
     } else {
         addReplyErrorObject(c,shared.err);

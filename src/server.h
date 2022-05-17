@@ -1301,8 +1301,8 @@ struct redisServer
     int module_blocked_pipe[2]; /* Pipe used to awake the event loop if a
                                    client blocked on a module command needs
                                    to be processed. */
-    pid_t child_pid;            /* PID of current child */
-    int child_type;             /* Type of current child */
+    pid_t child_pid;            /* 子进程的pid */
+    int child_type;             /* 子进程的类型 */
     client *module_client;      /* "Fake" client to call Redis from modules */
     /* Networking */
     int port; /* 服务器监听的TCP端口号，可通过参数port配置，默认端口号6379 */
@@ -1481,11 +1481,11 @@ struct redisServer
                                   to child process. */
     sds aof_child_diff;        /* AOF diff accumulator child side. */
     /* RDB persistence */
-    long long dirty;               /* Changes to DB from the last save */
+    long long dirty; /* 最后一次保存之后改变的键的个数 */
     long long dirty_before_bgsave; /* Used to restore dirty on failed BGSAVE */
     struct saveparam *saveparams;  /* Save points array for RDB */
     int saveparamslen;             /* Number of saving points */
-    char *rdb_filename;            /* Name of RDB file */
+    char *rdb_filename;            /* rdb文件名 */
     int rdb_compression;           /* Use compression in RDB? */
     int rdb_checksum;              /* Use RDB checksum? */
     int rdb_del_sync_files;        /* Remove RDB files used only for SYNC if
