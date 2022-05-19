@@ -1463,10 +1463,12 @@ struct redisServer
     int aof_lastbgrewrite_status;         /* C_OK or C_ERR */
     unsigned long aof_delayed_fsync;      /* delayed AOF fsync() counter */
     int aof_rewrite_incremental_fsync;    /* fsync incrementally while aof rewriting? */
-    int rdb_save_incremental_fsync;       /* fsync incrementally while rdb saving? */
+    int rdb_save_incremental_fsync; /* 开启该参数后，生成RDB文件时每产生32MB数据就执行一次fsync
+                                     */
     int aof_last_write_status;            /* C_OK or C_ERR */
     int aof_last_write_errno;             /* Valid if aof write/fsync status is ERR */
-    int aof_load_truncated;               /* Don't stop on unexpected AOF EOF. */
+    int aof_load_truncated; /* AOF文件会截断尾部不完整的命令然后继续加载，
+                             * 并且会在日志中进行提示 */
     int aof_use_rdb_preamble;             /* Use RDB preamble on AOF rewrites. */
     redisAtomic int aof_bio_fsync_status; /* Status of AOF fsync in bio job. */
     redisAtomic int aof_bio_fsync_errno;  /* Errno of AOF fsync in bio job. */
@@ -1497,7 +1499,7 @@ struct redisServer
     int rdb_bgsave_scheduled;      /* BGSAVE when possible if true. */
     int rdb_child_type;            /* Type of save by active child. */
     int lastbgsave_status;         /* C_OK or C_ERR */
-    int stop_writes_on_bgsave_err; /* Don't allow writes if can't BGSAVE */
+    int stop_writes_on_bgsave_err; /* BGSAVE失败后，停止接收写请求 */
     int rdb_pipe_read;             /* RDB pipe used to transfer the rdb data */
                                    /* to the parent process in diskless repl. */
     int rdb_child_exit_pipe;       /* Used by the diskless parent allow child exit. */
@@ -1529,19 +1531,29 @@ struct redisServer
     int use_exit_on_panic; /* Use exit() on panic and assert rather than
                             * abort(). useful for Valgrind. */
     /* Replication (master) */
-    char replid[CONFIG_RUN_ID_SIZE + 1];  /* My current replication ID. */
-    char replid2[CONFIG_RUN_ID_SIZE + 1]; /* replid inherited from master*/
+    char replid[CONFIG_RUN_ID_SIZE +
+                1]; /* Redis服务器的运行ID
+                     * 对于主服务器，replid表示的是当前服务器的运行ID
+                     * 对于从服务器，replid表示其复制的主服务器的运行ID */
+    char replid2
+        [CONFIG_RUN_ID_SIZE +
+         1]; /* 存储前一个主服务器RUN_ID，
+              * 当主服务器发生故障，自己成为新的主服务器时，
+              * 便使用replid2和second_replid_offset存储之前主服务器的运行ID与复制偏移量*/
     long long master_repl_offset;         /* My current replication offset */
     long long second_replid_offset;       /* Accept offsets up to this for replid2. */
     int slaveseldb;                       /* Last SELECTed DB in replication output */
-    int repl_ping_slave_period;           /* Master pings the slave every N seconds */
-    char *repl_backlog;                   /* Replication backlog for partial syncs */
-    long long repl_backlog_size;          /* Backlog circular buffer size */
-    long long repl_backlog_histlen;       /* Backlog actual data length */
-    long long repl_backlog_idx;           /* Backlog circular buffer current offset,
-                                             that is the next byte will'll write to.*/
-    long long repl_backlog_off;           /* Replication "master offset" of first
-                                             byte in the replication backlog buffer.*/
+    int repl_ping_slave_period;           /* 发送心跳包的周期 */
+    char *repl_backlog;                   /* 复制缓冲区，
+                                           * 用于缓存主服务器已执行且待发送给从服务器的命令请求 */
+    long long
+        repl_backlog_size; /* 缓冲区大小，可通过repl-backlog-size设置，默认为1MB
+                            */
+    long long repl_backlog_histlen; /* 复制缓冲区中存储的命令请求数据长度 */
+    long long
+        repl_backlog_idx; /* 复制缓冲区中存储的命令请求最后一个字节索引位置，
+                           * 即向复制缓冲区写入数据时会从该索引位置开始*/
+    long long repl_backlog_off; /* 复制缓冲区中第一个字节的复制偏移量 */
     time_t repl_backlog_time_limit;       /* Time without slaves after the backlog
                                              gets released. */
     time_t repl_no_slaves_since;          /* We have no slaves since that time.

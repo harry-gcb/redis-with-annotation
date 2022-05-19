@@ -155,28 +155,55 @@ void freeReplicationBacklog(void) {
 /* Add data to the replication backlog.
  * This function also increments the global replication offset stored at
  * server.master_repl_offset, because there is no case where we want to feed
- * the backlog without incrementing the offset. */
+ * the backlog without incrementing the offset.
+ * 添加数据到复制 backlog
+ * 并且按照添加内容的长度更新 server.master_repl_offset 偏移量 */
 void feedReplicationBacklog(void *ptr, size_t len) {
     unsigned char *p = ptr;
-
+    /* 将长度累加到全局 offset 中 */
     server.master_repl_offset += len;
 
     /* This is a circular buffer, so write as much data we can at every
-     * iteration and rewind the "idx" index if we reach the limit. */
+     * iteration and rewind the "idx" index if we reach the limit.
+     * 环形 buffer ，每次写尽可能多的数据，并在到达尾部时将 idx 重置到头部 */
     while(len) {
+        /* 从 idx 到 backlog 尾部的字节数 */
         size_t thislen = server.repl_backlog_size - server.repl_backlog_idx;
+        /* 如果 idx 到 backlog 尾部这段空间足以容纳要写入的内容
+         * 那么直接将写入数据长度设为 len
+         * 在将这些 len 字节复制之后，这个 while 循环将跳出 */
         if (thislen > len) thislen = len;
+        /* 将 p 中的 thislen 字节内容复制到 backlog */
         memcpy(server.repl_backlog+server.repl_backlog_idx,p,thislen);
+        /* 更新 idx ，指向新写入的数据之后 */
         server.repl_backlog_idx += thislen;
+        /* 如果写入达到尾部，那么将索引重置到头部 */
         if (server.repl_backlog_idx == server.repl_backlog_size)
             server.repl_backlog_idx = 0;
+        /* 减去已写入的字节数 */
         len -= thislen;
+        /* 将指针移动到已被写入数据的后面，指向未被复制数据的开头 */
         p += thislen;
+        /* 增加实际长度 */
         server.repl_backlog_histlen += thislen;
     }
+    /* histlen 的最大值只能等于 backlog_size
+     * 另外，当 histlen 大于 repl_backlog_size 时，
+     * 表示写入数据的前头有一部分数据被自己的尾部覆盖了
+     * 举个例子，例如 abcde 要写入到一个只有三个字节的环形数组中
+     * 且假设索引为 0
+     * 那么 abc 首先被写入，数组为 [a, b, c]
+     * 然后 de 被写入，数组为 [d, e, c] */
     if (server.repl_backlog_histlen > server.repl_backlog_size)
         server.repl_backlog_histlen = server.repl_backlog_size;
-    /* Set the offset of the first byte we have in the backlog. */
+    /* Set the offset of the first byte we have in the backlog.
+     * 记录程序可以依靠 backlog 来还原的数据的第一个字节的偏移量
+     * 比如 master_repl_offset = 10086
+     * repl_backlog_histlen = 30
+     * 那么 backlog 所保存的数据的第一个字节的偏移量为
+     * 10086 - 30 + 1 = 10056 + 1 = 10057
+     * 这说明如果从服务器如果从 10057 至 10086 之间的任何时间断线
+     * 那么从服务器都可以使用 PSYNC */
     server.repl_backlog_off = server.master_repl_offset -
                               server.repl_backlog_histlen + 1;
 }
