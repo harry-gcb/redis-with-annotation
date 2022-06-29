@@ -1,0 +1,13 @@
+/home/gaochunbo/workspace/redis-with-annotation/build/CMakeFiles/edit_cache.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/CMakeFiles/rebuild_cache.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/CMakeFiles/list_install_components.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/CMakeFiles/install.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/CMakeFiles/install/local.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/CMakeFiles/install/strip.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/cmake/CMakeFiles/helloworld.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/cmake/CMakeFiles/edit_cache.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/cmake/CMakeFiles/rebuild_cache.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/cmake/CMakeFiles/list_install_components.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/cmake/CMakeFiles/install.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/cmake/CMakeFiles/install/local.dir
+/home/gaochunbo/workspace/redis-with-annotation/build/cmake/CMakeFiles/install/strip.dir

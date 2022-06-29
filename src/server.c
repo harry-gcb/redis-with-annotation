@@ -652,10 +652,10 @@ struct redisCommand redisCommandTable[] = {
     /* 移除key的过期时间 */
     {"persist", persistCommand, 2, "write fast @keyspace", 0, NULL, 1, 1, 1, 0,
      0, 0},
-
+    /* 开启主从复制功能 */
     {"slaveof", replicaofCommand, 3, "admin no-script ok-stale", 0, NULL, 0, 0,
      0, 0, 0, 0},
-
+    /* 开启主从复制功能 */
     {"replicaof", replicaofCommand, 3, "admin no-script ok-stale", 0, NULL, 0,
      0, 0, 0, 0, 0},
 

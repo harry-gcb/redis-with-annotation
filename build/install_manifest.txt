@@ -1,0 +1,1 @@
+/home/gaochunbo/workspace/redis-with-annotation/module/helloworld.so

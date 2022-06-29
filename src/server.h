@@ -1320,7 +1320,8 @@ struct redisServer
     list *clients_to_close;                   /* 链表，保存了所有待关闭的客户端 Clients to close asynchronously */
     list *clients_pending_write;              /* There is to write or install handler. */
     list *clients_pending_read;               /* Client has pending read socket buffers. */
-    list *slaves, *monitors;                  /* List of slaves and MONITORs */
+    list *slaves;   /* 记录所有的从服务器，节点类型为client */
+    list *monitors; /* List of slaves and MONITORs */
     client *current_client;                   /* Current client executing the command. */
     rax *clients_timeout_table;               /* Radix tree for blocked clients timeouts. */
     long fixed_time_expire;                   /* If > 0, expire keys against server.mstime. */
@@ -1558,22 +1559,22 @@ struct redisServer
                                              gets released. */
     time_t repl_no_slaves_since;          /* We have no slaves since that time.
                                              Only valid if server.slaves len is 0. */
-    int repl_min_slaves_to_write;         /* Min number of slaves to write. */
-    int repl_min_slaves_max_lag;          /* Max lag of <count> slaves to write. */
-    int repl_good_slaves_count;           /* Number of slaves with lag <= max_lag. */
+    int repl_min_slaves_to_write; /* 是否开启最小数量从服务器写入功能 */
+    int repl_min_slaves_max_lag; /* 定义最小数量从服务器的最大延迟值 */
+    int repl_good_slaves_count;           /* 当前有效从服务器数量 */
     int repl_diskless_sync;               /* Master send RDB to slaves sockets directly. */
     int repl_diskless_load;               /* Slave parse RDB directly from the socket.
                                            * see REPL_DISKLESS_LOAD_* enum */
     int repl_diskless_sync_delay;         /* Delay to start a diskless repl BGSAVE. */
     /* Replication (slave) */
     char *masteruser;                   /* AUTH with this user and masterauth with master */
-    sds masterauth;                     /* AUTH with this password with master */
+    sds masterauth;                     /* 主服务器的验证密码 */
     char *masterhost; /* masterhost字段存储当前Redis服务器的master服务器的域名，
                        * 如果为NULL说明当前服务器不是某个Redis服务器的slaver
                        *（master服务器）*/
-    int masterport;                     /* Port of master */
+    int masterport;   /* 主服务器的端口 */
     int repl_timeout;                   /* Timeout after N seconds of master idle */
-    client *master;                     /* Client that is master for this slave */
+    client *master;                     /* 主服务器所对应的客户端 */
     client *cached_master;              /* Cached master to be reused for PSYNC. */
     int repl_syncio_timeout;            /* Timeout for synchronous I/O calls */
     int repl_state;                     /* Replication status if the instance is a slave */
@@ -1584,8 +1585,9 @@ struct redisServer
     int repl_transfer_fd;               /* Slave -> Master SYNC temp file descriptor */
     char *repl_transfer_tmpfile;        /* Slave-> master SYNC temp file name */
     time_t repl_transfer_lastio;        /* Unix time of the latest read, for timeout */
-    int repl_serve_stale_data;          /* Serve stale data when link is down? */
-    int repl_slave_ro;                  /* Slave is read only? */
+    int repl_serve_stale_data; /* 当主从服务器断开连接时，从服务器是否继续处理命令请求
+                                */
+    int repl_slave_ro; /* 从服务器是否只读（不处理写命令） */
     int repl_slave_ignore_maxmemory;    /* If true slaves do not evict. */
     time_t repl_down_since;             /* Unix time at which link with master went down */
     int repl_disable_tcp_nodelay;       /* Disable TCP_NODELAY after SYNC? */

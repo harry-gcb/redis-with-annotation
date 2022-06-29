@@ -2684,7 +2684,8 @@ void replicationSetMaster(char *ip, int port) {
     connectWithMaster();
 }
 
-/* Cancel replication, setting the instance as a master itself. */
+/* Cancel replication, setting the instance as a master itself.
+ * 取消复制，将服务器设置为主服务器 */
 void replicationUnsetMaster(void) {
     if (server.masterhost == NULL) return; /* Nothing to do. */
 
@@ -2772,7 +2773,8 @@ void replicationHandleMasterDisconnection(void) {
 
 void replicaofCommand(client *c) {
     /* SLAVEOF is not allowed in cluster mode as replication is automatically
-     * configured using the current address of the master node. */
+     * configured using the current address of the master node.
+     * 不允许在集群模式中使用 */
     if (server.cluster_enabled) {
         addReplyError(c,"REPLICAOF not allowed in cluster mode.");
         return;
@@ -2784,10 +2786,12 @@ void replicaofCommand(client *c) {
     }
 
     /* The special host/port combination "NO" "ONE" turns the instance
-     * into a master. Otherwise the new master address is set. */
+     * into a master. Otherwise the new master address is set.
+     * SLAVEOF NO ONE 让从服务器转为主服务器 */
     if (!strcasecmp(c->argv[1]->ptr,"no") &&
         !strcasecmp(c->argv[2]->ptr,"one")) {
         if (server.masterhost) {
+            /* 让服务器取消复制，成为主服务器 */
             replicationUnsetMaster();
             sds client = catClientInfoString(sdsempty(),c);
             serverLog(LL_NOTICE,"MASTER MODE enabled (user request from '%s')",
@@ -3052,23 +3056,27 @@ void replicationResurrectCachedMaster(connection *conn) {
 
 /* This function counts the number of slaves with lag <= min-slaves-max-lag.
  * If the option is active, the server will prevent writes if there are not
- * enough connected slaves with the specified lag (or less). */
+ * enough connected slaves with the specified lag (or less).
+ * 如果服务器开启了 min-slaves-max-lag 选项，
+ * 那么在这个选项所指定的条件达不到时，服务器将阻止从服务器的写操作执行*/
 void refreshGoodSlavesCount(void) {
     listIter li;
     listNode *ln;
     int good = 0;
-
+    /* 没有配置这两个命令，直接返回 */
     if (!server.repl_min_slaves_to_write ||
         !server.repl_min_slaves_max_lag) return;
 
     listRewind(server.slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
+        /* 计算延迟值 */
         time_t lag = server.unixtime - slave->repl_ack_time;
-
+        /* 计入 GOOD */
         if (slave->replstate == SLAVE_STATE_ONLINE &&
             lag <= server.repl_min_slaves_max_lag) good++;
     }
+    /* 更新状态良好的从服务器数量 */
     server.repl_good_slaves_count = good;
 }
 

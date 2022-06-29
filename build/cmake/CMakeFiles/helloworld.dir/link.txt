@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC -shared -Wl,-soname,helloworld.so -o helloworld.so CMakeFiles/helloworld.dir/__/module/helloworld/helloworld.c.o 
